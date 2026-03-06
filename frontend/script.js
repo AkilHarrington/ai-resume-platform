@@ -19,10 +19,9 @@ const isLocal =
 
 const API_BASE_URL = isLocal
   ? "http://127.0.0.1:8000"
-  : "https://YOUR-BACKEND-URL.onrender.com";
+  : "https://ai-resume-platform-eluf.onrender.com";
 
 let latestFormData = null;
-let latestResumeData = null;
 
 function getFormData() {
   return {
@@ -192,7 +191,6 @@ form.addEventListener("submit", async (event) => {
 
     const result = await response.json();
 
-    latestResumeData = result.resume;
     renderResumePreview(result.resume);
     renderATS(result.ats_analysis);
 
