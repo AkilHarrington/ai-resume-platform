@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Resume Studio</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+<header class="header">
+<h1>AI Resume Studio</h1>
+<p>Generate ATS-optimized resumes instantly</p>
+</header>
+
+<div class="app">
+
+<div class="left-panel">
+
+<h2>Resume Builder</h2>
+
+<form id="resumeForm">
+
+<label>Full Name</label>
+<input id="name" required>
+
+<label>Email</label>
+<input id="email" required>
+
+<label>Phone</label>
+<input id="phone">
+
+<label>Location</label>
+<input id="location">
+
+<label>Skills</label>
+<textarea id="skills" rows="3"></textarea>
+
+<label>Experience</label>
+<textarea id="experience" rows="4"></textarea>
+
+<label>Education</label>
+<textarea id="education" rows="3"></textarea>
+
+<label>Certifications</label>
+<textarea id="certifications" rows="2"></textarea>
+
+<label>Target Job Description</label>
+<textarea id="job_description" rows="5"></textarea>
+
+<button id="generateBtn" type="submit">
+Generate Resume Preview
+</button>
+
+</form>
+
+<p id="status"></p>
+
+<div id="actions" class="hidden">
+
+<button id="downloadPdfBtn">
+Download PDF
+</button>
+
+<button id="downloadDocxBtn">
+Download DOCX
+</button>
+
+</div>
+
+</div>
+
+<div class="right-panel">
+
+<h2>Resume Preview</h2>
+
+<div id="previewCard"></div>
+
+<div id="atsPanel" class="hidden">
+
+<h3>ATS Match Analysis</h3>
+
+<div class="score">
+
+<div id="scoreCircle">
+<span id="atsScore">0%</span>
+</div>
+
+</div>
+
+<div class="keywords">
+
+<div>
+
+<h4>Matched Keywords</h4>
+<ul id="matchedKeywords"></ul>
+
+</div>
+
+<div>
+
+<h4>Missing Keywords</h4>
+<ul id="missingKeywords"></ul>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>

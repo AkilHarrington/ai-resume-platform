@@ -1,0 +1,17 @@
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+
+# Generated resume files
+backend/generated/
+
+# Environment files
+.env
+backend/.env
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
