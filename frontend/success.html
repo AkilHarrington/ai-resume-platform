@@ -1,0 +1,40 @@
+<!--
+=========================================================
+File: success.html
+Purpose:
+Handles successful Stripe payment redirect for the MVP.
+
+Responsibilities:
+- Marks the user as Pro in localStorage
+- Redirects the user back to index.html
+
+Notes:
+- This is MVP payment unlock logic
+- Current implementation is frontend-based
+- Future production version should validate entitlements server-side
+=========================================================
+-->
+
+<!DOCTYPE html>
+<html>
+<head>
+<title>Payment Successful</title>
+</head>
+
+<body>
+
+<h2>Payment Successful</h2>
+<p>Your Pro features are now unlocked.</p>
+
+<script>
+
+localStorage.setItem("pro_user", "true")
+
+setTimeout(() => {
+  window.location.href = "index.html"
+}, 1500)
+
+</script>
+
+</body>
+</html>

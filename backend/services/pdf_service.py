@@ -1,147 +1,411 @@
-from pathlib import Path
-from textwrap import wrap
+# =========================================================
+# File: services/pdf_service.py
+# Purpose:
+# Generate resume PDF files from structured resume JSON.
+#
+# Responsibilities:
+# - format resume content into a PDF document
+# - support multiple resume templates
+# - apply layout, typography, spacing, and divider rules
+# - save generated PDF files for frontend download
+#
+# Key Notes:
+# - this file handles export formatting only
+# - it should not contain AI generation logic
+# - frontend passes structured resume_data + template choice
+# - templates currently supported:
+#     - professional
+#     - modern
+#     - executive
+# =========================================================
 
-from reportlab.lib.pagesizes import LETTER
+# =========================================================
+# Imports
+# =========================================================
+
+import os
+import re
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
 
 
-def create_resume_pdf(resume_data: dict) -> str:
-    output_dir = Path("generated")
-    output_dir.mkdir(exist_ok=True)
+# =========================================================
+# Constants
+# =========================================================
 
-    safe_name = resume_data.get("full_name", "resume").replace(" ", "_").lower()
-    output_path = output_dir / f"{safe_name}_resume.pdf"
+GENERATED_DIR = "generated"
 
-    c = canvas.Canvas(str(output_path), pagesize=LETTER)
-    width, height = LETTER
 
-    left_margin = 0.75 * inch
-    right_margin = 0.75 * inch
-    usable_width = width - left_margin - right_margin
-    top_margin = height - 0.75 * inch
-    bottom_margin = 0.75 * inch
-    y = top_margin
+# =========================================================
+# File / Filename Helpers
+# =========================================================
 
-    def new_page():
-        nonlocal y
-        c.showPage()
-        y = top_margin
+def safe_filename(name: str) -> str:
+    """
+    Convert a resume name into a safe filename.
 
-    def ensure_space(lines_needed=1, line_height=14):
-        nonlocal y
-        needed = lines_needed * line_height
-        if y - needed < bottom_margin:
-            new_page()
+    Example:
+    'Jane Doe' -> 'jane_doe'
+    """
+    name = name.strip().lower()
+    name = re.sub(r"[^a-z0-9]+", "_", name)
+    return name.strip("_") or "resume"
 
-    def draw_wrapped_text(text, font_name="Helvetica", font_size=10, line_height=14, indent=0):
-        nonlocal y
-        if not text:
-            return
 
-        c.setFont(font_name, font_size)
+# =========================================================
+# Text Layout Helpers
+# =========================================================
 
-        max_chars = 95 if indent == 0 else 88
-        wrapped_lines = wrap(text, width=max_chars)
+def wrap_text(text, max_chars=95):
+    """
+    Wrap text into multiple lines based on a rough max character limit.
 
-        ensure_space(len(wrapped_lines), line_height)
+    Notes:
+    - This is a simple character-based wrapper for MVP use.
+    - It works well enough for resume export and keeps layout predictable.
+    """
+    words = text.split()
+    lines = []
+    current = ""
 
-        for line in wrapped_lines:
-            c.drawString(left_margin + indent, y, line)
-            y -= line_height
+    for word in words:
+        test = f"{current} {word}".strip()
+        if len(test) <= max_chars:
+            current = test
+        else:
+            lines.append(current)
+            current = word
 
-    def draw_section_heading(text):
-        nonlocal y
-        ensure_space(2, 16)
-        y -= 4
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(left_margin, y, text)
+    if current:
+        lines.append(current)
+
+    return lines
+
+
+def draw_line_if_needed(pdf, y, cfg):
+    """
+    Start a new page when vertical space is too low.
+
+    Returns:
+    - current y position (either same page or reset to top of new page)
+    """
+    if y < 0.8 * inch:
+        pdf.showPage()
+        return cfg["start_y"]
+    return y
+
+
+def estimate_subtitle(resume_data: dict) -> str:
+    """
+    Use the first experience title as the subtitle when applicable.
+
+    This is primarily used by the modern and executive templates.
+    """
+    experience = resume_data.get("professional_experience", [])
+    if experience and experience[0].get("title"):
+        return experience[0]["title"]
+    return ""
+
+
+# =========================================================
+# Template Configuration
+# =========================================================
+
+def get_pdf_template_config(template: str):
+    """
+    Return layout and styling settings for each supported PDF template.
+    """
+    if template == "executive":
+        return {
+            "name_font": ("Helvetica-Bold", 21),
+            "subtitle_font": ("Helvetica", 11.5),
+            "body_font": ("Helvetica", 11.1),
+            "heading_font": ("Helvetica-Bold", 12.5),
+            "company_font": ("Helvetica-Bold", 11.8),
+            "title_font": ("Helvetica-Oblique", 11.1),
+            "line_gap": 15,
+            "left": 0.9 * inch,
+            "start_y": 10.35 * inch,
+            "header_gap": 24,
+            "section_gap": 18,
+            "bullet_gap": 4,
+            "draw_rule": True,
+            "heading_caps": True,
+            "skills_style": "pipes",
+            "role_layout": "stacked",
+            "accent": colors.HexColor("#1f2937"),
+        }
+
+    if template == "modern":
+        return {
+            "name_font": ("Helvetica-Bold", 17.5),
+            "subtitle_font": ("Helvetica-Oblique", 11),
+            "body_font": ("Helvetica", 10.8),
+            "heading_font": ("Helvetica-Oblique", 11.8),
+            "company_font": ("Helvetica-Bold", 11.3),
+            "title_font": ("Helvetica-Oblique", 10.8),
+            "line_gap": 15,
+            "left": 0.85 * inch,
+            "start_y": 10.45 * inch,
+            "header_gap": 22,
+            "section_gap": 16,
+            "bullet_gap": 5,
+            "draw_rule": True,
+            "heading_caps": False,
+            "skills_style": "inline-dots",
+            "role_layout": "title-first",
+            "accent": colors.HexColor("#2563eb"),
+        }
+
+    # Default = professional
+    return {
+        "name_font": ("Helvetica-Bold", 15.5),
+        "subtitle_font": ("Helvetica", 0),
+        "body_font": ("Helvetica", 10.3),
+        "heading_font": ("Helvetica-Bold", 11),
+        "company_font": ("Helvetica-Bold", 11),
+        "title_font": ("Helvetica-Oblique", 10.4),
+        "line_gap": 13,
+        "left": 0.65 * inch,
+        "start_y": 10.55 * inch,
+        "header_gap": 18,
+        "section_gap": 12,
+        "bullet_gap": 2,
+        "draw_rule": False,
+        "heading_caps": True,
+        "skills_style": "bullets",
+        "role_layout": "company-first-inline",
+        "accent": colors.black,
+    }
+
+
+# =========================================================
+# Bullet Rendering Helpers
+# =========================================================
+
+def draw_bullets(pdf, items, y, cfg):
+    """
+    Draw a bullet list and return the updated y position.
+    """
+    left = cfg["left"]
+    pdf.setFont(cfg["body_font"][0], cfg["body_font"][1])
+
+    for item in items:
+        for idx, line in enumerate(wrap_text(item, 88)):
+            y = draw_line_if_needed(pdf, y, cfg)
+            prefix = "• " if idx == 0 else "  "
+            pdf.drawString(left + 10, y, f"{prefix}{line}")
+            y -= cfg["line_gap"]
+
+    return y - cfg["bullet_gap"]
+
+
+# =========================================================
+# Main PDF Export Entry Point
+# =========================================================
+
+def create_resume_pdf(resume_data: dict, template: str = "professional") -> str:
+    """
+    Create a PDF resume file from structured resume JSON and return the file path.
+
+    Flow:
+    1. Create output folder if needed
+    2. Build PDF canvas
+    3. Apply selected template config
+    4. Render all resume sections
+    5. Save PDF to generated directory
+    """
+    os.makedirs(GENERATED_DIR, exist_ok=True)
+
+    filename = f"{safe_filename(resume_data.get('full_name', 'resume'))}_{template}_resume.pdf"
+    file_path = os.path.join(GENERATED_DIR, filename)
+
+    pdf = canvas.Canvas(file_path, pagesize=letter)
+    width, height = letter
+    cfg = get_pdf_template_config(template)
+
+    left = cfg["left"]
+    y = cfg["start_y"]
+
+    # =====================================================
+    # Header Rendering
+    # =====================================================
+
+    pdf.setFillColor(cfg["accent"])
+    pdf.setFont(cfg["name_font"][0], cfg["name_font"][1])
+    pdf.drawCentredString(width / 2, y, resume_data.get("full_name", ""))
+    y -= 18
+
+    subtitle = estimate_subtitle(resume_data)
+    if subtitle and cfg["subtitle_font"][1] > 0:
+        pdf.setFont(cfg["subtitle_font"][0], cfg["subtitle_font"][1])
+        pdf.drawCentredString(width / 2, y, subtitle)
         y -= 16
 
-    def draw_bullet(text):
+    contact_parts = [
+        resume_data.get("location", ""),
+        resume_data.get("phone", ""),
+        resume_data.get("email", ""),
+    ]
+    contact_line = " | ".join([p for p in contact_parts if p])
+
+    pdf.setFillColor(colors.black)
+    pdf.setFont(cfg["body_font"][0], 10)
+    pdf.drawCentredString(width / 2, y, contact_line)
+    y -= cfg["header_gap"]
+
+    if cfg["draw_rule"]:
+        pdf.setStrokeColor(cfg["accent"])
+        pdf.line(left, y, width - left, y)
+        y -= 20  # extra spacing so divider does not overlap following text
+
+    # =====================================================
+    # Nested Section Drawing Helpers
+    # =====================================================
+
+    def draw_heading(title):
         nonlocal y
-        if not text:
+
+        y = draw_line_if_needed(pdf, y, cfg)
+        pdf.setFillColor(cfg["accent"])
+        pdf.setFont(cfg["heading_font"][0], cfg["heading_font"][1])
+
+        text = title.upper() if cfg["heading_caps"] else title
+        pdf.drawString(left, y, text)
+        y -= 15
+
+        if cfg["draw_rule"]:
+            pdf.setStrokeColor(cfg["accent"])
+            pdf.line(left, y + 6, left + 140, y + 6)
+            y -= 6  # extra spacing below heading divider
+
+        pdf.setFillColor(colors.black)
+
+    def draw_paragraph(text):
+        nonlocal y
+
+        pdf.setFont(cfg["body_font"][0], cfg["body_font"][1])
+        for line in wrap_text(text, 92):
+            y = draw_line_if_needed(pdf, y, cfg)
+            pdf.drawString(left, y, line)
+            y -= cfg["line_gap"]
+
+        y -= 3
+
+    def draw_skills(skills):
+        nonlocal y
+
+        if not skills:
             return
 
-        wrapped_lines = wrap(text, width=84)
-        ensure_space(len(wrapped_lines), 14)
+        style = cfg["skills_style"]
+        pdf.setFont(cfg["body_font"][0], cfg["body_font"][1])
 
-        c.setFont("Helvetica", 10)
+        if style == "bullets":
+            y = draw_bullets(pdf, skills, y, cfg)
 
-        first_line = True
-        for line in wrapped_lines:
-            if first_line:
-                c.drawString(left_margin + 12, y, f"• {line}")
-                first_line = False
-            else:
-                c.drawString(left_margin + 24, y, line)
-            y -= 14
-
-    # Header
-    full_name = resume_data.get("full_name", "")
-    if full_name:
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(left_margin, y, full_name)
-        y -= 20
-
-    contact_parts = []
-    if resume_data.get("location"):
-        contact_parts.append(resume_data["location"])
-    if resume_data.get("phone"):
-        contact_parts.append(resume_data["phone"])
-    if resume_data.get("email"):
-        contact_parts.append(resume_data["email"])
-
-    if contact_parts:
-        draw_wrapped_text(" | ".join(contact_parts), font_size=10, line_height=18)
-
-    # Professional Summary
-    if resume_data.get("professional_summary"):
-        draw_section_heading("Professional Summary")
-        draw_wrapped_text(resume_data["professional_summary"], line_height=15)
-
-    # Skills
-    skills = resume_data.get("skills", [])
-    if skills:
-        draw_section_heading("Skills")
-        for skill in skills:
-            draw_bullet(skill)
-
-    # Professional Experience
-    experience_items = resume_data.get("professional_experience", [])
-    if experience_items:
-        draw_section_heading("Professional Experience")
-        for item in experience_items:
-            company = item.get("company", "")
-            title = item.get("title", "")
-            heading = " — ".join(part for part in [company, title] if part)
-
-            if heading:
-                draw_wrapped_text(
-                    heading,
-                    font_name="Helvetica-Bold",
-                    font_size=10,
-                    line_height=16
-                )
-
-            for bullet in item.get("description", []):
-                draw_bullet(bullet)
-
+        elif style == "inline-dots":
+            line = " • ".join(skills)
+            for wrapped in wrap_text(line, 92):
+                y = draw_line_if_needed(pdf, y, cfg)
+                pdf.drawString(left, y, wrapped)
+                y -= cfg["line_gap"]
             y -= 4
 
+        elif style == "pipes":
+            line = " | ".join(skills)
+            for wrapped in wrap_text(line, 92):
+                y = draw_line_if_needed(pdf, y, cfg)
+                pdf.drawString(left, y, wrapped)
+                y -= cfg["line_gap"]
+            y -= 4
+
+    # =====================================================
+    # Professional Summary
+    # =====================================================
+
+    summary = resume_data.get("professional_summary", "")
+    if summary:
+        draw_heading("Professional Summary")
+        draw_paragraph(summary)
+
+    # =====================================================
+    # Skills
+    # =====================================================
+
+    skills = resume_data.get("skills", [])
+    if skills:
+        draw_heading("Skills")
+        draw_skills(skills)
+
+    # =====================================================
+    # Professional Experience
+    # =====================================================
+
+    experience = resume_data.get("professional_experience", [])
+    if experience:
+        draw_heading("Professional Experience")
+
+        for role in experience:
+            y = draw_line_if_needed(pdf, y, cfg)
+
+            company = role.get("company", "")
+            title = role.get("title", "")
+
+            if cfg["role_layout"] == "company-first-inline":
+                pdf.setFont(cfg["company_font"][0], cfg["company_font"][1])
+                pdf.drawString(left, y, company)
+
+                if title:
+                    pdf.setFont(cfg["title_font"][0], cfg["title_font"][1])
+                    pdf.drawString(left + 185, y, f"— {title}")
+
+                y -= 15
+
+            elif cfg["role_layout"] == "title-first":
+                pdf.setFillColor(cfg["accent"])
+                pdf.setFont(cfg["company_font"][0], cfg["company_font"][1])
+                pdf.drawString(left, y, title)
+                y -= 14
+
+                pdf.setFillColor(colors.black)
+                pdf.setFont(cfg["title_font"][0], cfg["title_font"][1])
+                pdf.drawString(left, y, company)
+                y -= 14
+
+            elif cfg["role_layout"] == "stacked":
+                pdf.setFillColor(cfg["accent"])
+                pdf.setFont(cfg["company_font"][0], cfg["company_font"][1])
+                pdf.drawString(left, y, company.upper())
+                y -= 14
+
+                pdf.setFillColor(colors.black)
+                pdf.setFont(cfg["title_font"][0], cfg["title_font"][1])
+                pdf.drawString(left, y, title)
+                y -= 14
+
+            y = draw_bullets(pdf, role.get("description", []), y, cfg)
+
+    # =====================================================
     # Education
-    education_items = resume_data.get("education", [])
-    if education_items:
-        draw_section_heading("Education")
-        for entry in education_items:
-            draw_bullet(entry)
+    # =====================================================
 
+    education = resume_data.get("education", [])
+    if education:
+        draw_heading("Education")
+        y = draw_bullets(pdf, education, y, cfg)
+
+    # =====================================================
     # Certifications
-    certification_items = resume_data.get("certifications", [])
-    if certification_items:
-        draw_section_heading("Certifications")
-        for entry in certification_items:
-            draw_bullet(entry)
+    # =====================================================
 
-    c.save()
-    return str(output_path)
+    certifications = resume_data.get("certifications", [])
+    if certifications:
+        draw_heading("Certifications")
+        y = draw_bullets(pdf, certifications, y, cfg)
+
+    pdf.save()
+    return file_path

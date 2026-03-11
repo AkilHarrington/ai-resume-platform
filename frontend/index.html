@@ -1,119 +1,356 @@
 <!DOCTYPE html>
+
+<!--
+=========================================================
+File: index.html
+Purpose:
+Main frontend UI for the AI Resume Platform.
+
+Responsibilities:
+- Defines the page layout
+- Holds all form inputs and UI containers
+- Provides package gate controls
+- Provides template selector
+- Provides preview and analysis sections
+- Provides premium action buttons
+
+Notes:
+- This file is mostly static structure
+- Dynamic content is rendered by script.js
+- Element IDs in this file are tightly coupled to script.js
+- Changing IDs here requires matching updates in script.js
+=========================================================
+-->
+
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Resume Studio</title>
-<link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Resume Studio</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
-
 <body>
 
-<header class="header">
-<h1>AI Resume Studio</h1>
-<p>Generate ATS-optimized resumes instantly</p>
-</header>
+  <header class="header">
+    <h1>AI Resume Studio</h1>
+    <p>Generate ATS-optimized resumes instantly</p>
+  </header>
 
-<div class="app">
+  <div class="app">
+    <div class="left-panel">
+      <h2>Resume Builder</h2>
 
-<div class="left-panel">
+      <div id="packageGate" class="package-gate">
+        <div class="package-gate-header">
+          <h3>Choose Your Access</h3>
+          <p>Start free or unlock the full resume optimization suite.</p>
+        </div>
 
-<h2>Resume Builder</h2>
+        <div class="package-options">
+          <button type="button" class="package-card active" data-package="free" id="freePackageCard">
+            <div class="package-title-row">
+              <div>
+                <div class="package-name">Free Preview</div>
+                <div class="package-price">TTD 0</div>
+              </div>
+              <div class="package-check">✓</div>
+            </div>
+            <ul class="package-features">
+              <li>Resume preview</li>
+              <li>Basic ATS score</li>
+              <li>Single template access</li>
+            </ul>
+          </button>
 
-<form id="resumeForm">
+          <button type="button" class="package-card" data-package="pro" id="proPackageCard">
+            <div class="package-title-row">
+              <div>
+                <div class="package-name">Pro Package</div>
+                <div class="package-price">Premium Unlock</div>
+              </div>
+              <div class="package-check">✓</div>
+            </div>
+            <ul class="package-features">
+              <li>Resume optimization</li>
+              <li>Cover letter generation</li>
+              <li>All templates</li>
+              <li>Advanced ATS insights</li>
+              <li>PDF / DOCX downloads</li>
+            </ul>
+          </button>
+        </div>
 
-<label>Full Name</label>
-<input id="name" required>
+        <button id="upgradeBtn" class="upgrade-btn" type="button">Upgrade to Pro</button>
 
-<label>Email</label>
-<input id="email" required>
+        <div id="upgradeNotice" class="upgrade-notice hidden">
+          Upgrade to Pro to unlock resume optimization, cover letters, downloads, all templates, and advanced ATS insights.
+        </div>
+      </div>
 
-<label>Phone</label>
-<input id="phone">
+      <form id="resumeForm">
+        <label for="name">Full Name</label>
+        <input id="name" required>
 
-<label>Location</label>
-<input id="location">
+        <label for="email">Email</label>
+        <input id="email" required>
 
-<label>Skills</label>
-<textarea id="skills" rows="3"></textarea>
+        <label for="phone">Phone</label>
+        <input id="phone">
 
-<label>Experience</label>
-<textarea id="experience" rows="4"></textarea>
+        <label for="location">Location</label>
+        <input id="location">
 
-<label>Education</label>
-<textarea id="education" rows="3"></textarea>
+        <label for="skills">Skills</label>
+        <textarea id="skills" rows="3"></textarea>
 
-<label>Certifications</label>
-<textarea id="certifications" rows="2"></textarea>
+        <label for="experience">Experience</label>
+        <textarea id="experience" rows="4"></textarea>
 
-<label>Target Job Description</label>
-<textarea id="job_description" rows="5"></textarea>
+        <label for="education">Education</label>
+        <textarea id="education" rows="3"></textarea>
 
-<button id="generateBtn" type="submit">
-Generate Resume Preview
-</button>
+        <label for="certifications">Certifications</label>
+        <textarea id="certifications" rows="2"></textarea>
 
-</form>
+        <label>Resume Template</label>
 
-<p id="status"></p>
+        <div id="templateCards" class="template-cards">
+          <button type="button" class="template-card active" data-template="professional">
+            <div class="template-card-top">
+              <div>
+                <div class="template-card-title">Professional</div>
+                <div class="template-card-subtitle">Classic, compact, ATS-safe</div>
+              </div>
+              <div class="template-check">✓</div>
+            </div>
+            <div class="template-mini template-mini-professional">
+              <div class="mini-name"></div>
+              <div class="mini-line short"></div>
+              <div class="mini-heading"></div>
+              <div class="mini-line"></div>
+              <div class="mini-line"></div>
+              <div class="mini-heading"></div>
+              <div class="mini-bullet"></div>
+              <div class="mini-bullet"></div>
+            </div>
+          </button>
 
-<div id="actions" class="hidden">
+          <button type="button" class="template-card" data-template="modern">
+            <div class="template-card-top">
+              <div>
+                <div class="template-card-title">Modern</div>
+                <div class="template-card-subtitle">Clean, contemporary, title-first</div>
+              </div>
+              <div class="template-check">✓</div>
+            </div>
+            <div class="template-mini template-mini-modern">
+              <div class="mini-name"></div>
+              <div class="mini-role"></div>
+              <div class="mini-line short"></div>
+              <div class="mini-heading"></div>
+              <div class="mini-line"></div>
+              <div class="mini-line"></div>
+              <div class="mini-heading"></div>
+              <div class="mini-inline"></div>
+            </div>
+          </button>
 
-<button id="downloadPdfBtn">
-Download PDF
-</button>
+          <button type="button" class="template-card" data-template="executive">
+            <div class="template-card-top">
+              <div>
+                <div class="template-card-title">Executive</div>
+                <div class="template-card-subtitle">Premium, strongest hierarchy</div>
+              </div>
+              <div class="template-check">✓</div>
+            </div>
+            <div class="template-mini template-mini-executive">
+              <div class="mini-name"></div>
+              <div class="mini-role"></div>
+              <div class="mini-rule"></div>
+              <div class="mini-heading"></div>
+              <div class="mini-line"></div>
+              <div class="mini-heading"></div>
+              <div class="mini-pipes"></div>
+            </div>
+          </button>
+        </div>
 
-<button id="downloadDocxBtn">
-Download DOCX
-</button>
+        <select id="template" class="template-hidden-select" aria-hidden="true" tabindex="-1">
+          <option value="professional">Professional</option>
+          <option value="modern">Modern</option>
+          <option value="executive">Executive</option>
+        </select>
 
-</div>
+        <p id="templateNote" class="resume-template-note">
+          Professional — Classic, compact, ATS-safe
+        </p>
 
-</div>
+        <label for="job_description">Target Job Description</label>
+        <textarea id="job_description" rows="5"></textarea>
 
-<div class="right-panel">
+        <button id="generateBtn" type="submit">Generate Resume Preview</button>
+      </form>
 
-<h2>Resume Preview</h2>
+      <div id="loadingState" class="hidden">
+        <div class="spinner"></div>
+        <p id="loadingText">Working...</p>
+      </div>
 
-<div id="previewCard"></div>
+      <p id="status" class="status-info"></p>
 
-<div id="atsPanel" class="hidden">
+      <div id="actions" class="hidden">
+        <button id="improveResumeBtn" type="button">Improve Resume</button>
+        <button id="downloadPdfBtn" type="button">Download PDF</button>
+        <button id="downloadDocxBtn" type="button">Download DOCX</button>
+        <button id="generateCoverLetterBtn" type="button">Generate Cover Letter</button>
+        <button id="downloadCoverLetterBtn" type="button">Download Cover Letter DOCX</button>
+      </div>
+    </div>
 
-<h3>ATS Match Analysis</h3>
+    <div class="right-panel">
+      <h2>Resume Preview</h2>
 
-<div class="score">
+      <div id="previewCard" class="preview-template-professional"></div>
 
-<div id="scoreCircle">
-<span id="atsScore">0%</span>
-</div>
+      <div id="atsPanel" class="hidden">
+        <h3>ATS Match Analysis</h3>
 
-</div>
+        <div class="score">
+          <div id="scoreCircle">
+            <span id="atsScore">0%</span>
+          </div>
+        </div>
 
-<div class="keywords">
+        <div id="scoreComparison" class="hidden">
+          <p><strong>Original Resume Score:</strong> <span id="originalScore">0%</span></p>
+          <p><strong>Optimized Resume Score:</strong> <span id="improvedScore">0%</span></p>
+          <p id="scoreDelta"></p>
+        </div>
 
-<div>
+        <div id="improvementPanel" class="hidden">
+          <h4>ATS Improvement Summary</h4>
+          <ul id="improvementList"></ul>
 
-<h4>Matched Keywords</h4>
-<ul id="matchedKeywords"></ul>
+          <div id="addedKeywordsWrap" class="hidden">
+            <p class="improvement-label"><strong>Keywords added in the optimized version</strong></p>
+            <div id="addedKeywords"></div>
+          </div>
+        </div>
 
-</div>
+        <div id="keywordStatus" class="hidden"></div>
 
-<div>
+        <div class="keywords">
+          <div>
+            <h4>Matched Keywords</h4>
+            <ul id="matchedKeywords"></ul>
+          </div>
 
-<h4>Missing Keywords</h4>
-<ul id="missingKeywords"></ul>
+          <div>
+            <h4>Missing Keywords</h4>
+            <ul id="missingKeywords"></ul>
+          </div>
+        </div>
+      </div>
 
-</div>
+      <div id="skillGapPanel" class="hidden">
+        <h3>Skill Gap Analysis</h3>
 
-</div>
+        <div class="skill-gap-grid">
+          <div class="skill-column">
+            <h4>Strong Matches</h4>
+            <div id="strongSkills"></div>
+          </div>
 
-</div>
+          <div class="skill-column">
+            <h4>Partial Matches</h4>
+            <div id="partialSkills"></div>
+          </div>
 
-</div>
+          <div class="skill-column">
+            <h4>Skill Gaps</h4>
+            <div id="missingSkills"></div>
+          </div>
+        </div>
+      </div>
 
-</div>
+      <div id="strengthMeterPanel" class="hidden">
+        <h3>Resume Strength Meter</h3>
 
-<script src="script.js"></script>
+        <div class="strength-overall">
+          <div id="strengthBadge">Strong</div>
+        </div>
 
+        <div class="strength-grid">
+          <div class="strength-item">
+            <div class="strength-label">Keyword Match</div>
+            <div class="strength-bar">
+              <div id="strengthKeywordMatch" class="strength-fill"></div>
+            </div>
+            <div id="strengthKeywordMatchValue" class="strength-value">0/10</div>
+          </div>
+
+          <div class="strength-item">
+            <div class="strength-label">Clarity</div>
+            <div class="strength-bar">
+              <div id="strengthClarity" class="strength-fill"></div>
+            </div>
+            <div id="strengthClarityValue" class="strength-value">0/10</div>
+          </div>
+
+          <div class="strength-item">
+            <div class="strength-label">Impact</div>
+            <div class="strength-bar">
+              <div id="strengthImpact" class="strength-fill"></div>
+            </div>
+            <div id="strengthImpactValue" class="strength-value">0/10</div>
+          </div>
+
+          <div class="strength-item">
+            <div class="strength-label">Structure</div>
+            <div class="strength-bar">
+              <div id="strengthStructure" class="strength-fill"></div>
+            </div>
+            <div id="strengthStructureValue" class="strength-value">0/10</div>
+          </div>
+
+          <div class="strength-item">
+            <div class="strength-label">Professional Tone</div>
+            <div class="strength-bar">
+              <div id="strengthTone" class="strength-fill"></div>
+            </div>
+            <div id="strengthToneValue" class="strength-value">0/10</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="comparisonPanel" class="hidden">
+        <h3>Before vs After Resume Comparison</h3>
+
+        <div class="comparison-grid">
+          <div class="comparison-card">
+            <h4>Original Resume</h4>
+            <div id="originalResumeComparison"></div>
+          </div>
+
+          <div class="comparison-card">
+            <h4>Optimized Resume</h4>
+            <div id="improvedResumeComparison"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="rewriteExplanationPanel" class="hidden">
+        <h3>AI Rewrite Explanations</h3>
+        <ul id="rewriteExplanationList"></ul>
+      </div>
+
+      <div id="coverLetterSection" class="hidden">
+        <h2>Cover Letter</h2>
+        <div id="coverLetterPreview" class="cover-letter-box"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
 </body>
 </html>

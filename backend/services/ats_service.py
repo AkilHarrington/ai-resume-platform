@@ -1,106 +1,278 @@
+# =========================================================
+# File: services/ats_service.py
+# Purpose:
+# ATS keyword extraction and resume/job-description matching logic.
+#
+# Responsibilities:
+# - normalize text for ATS-style keyword matching
+# - remove low-value stopwords from job descriptions and resume text
+# - flatten structured resume JSON into searchable text
+# - calculate ATS score based on matched vs missing keywords
+#
+# Key Notes:
+# - this is deterministic matching logic for the MVP
+# - frontend depends on the response shape from calculate_ats_score()
+# - stopword tuning is expected to evolve over time as more resume tests are run
+# - future Phase 2 improvements may include smarter phrase weighting,
+#   controlled variation, and more advanced matching rules
+# =========================================================
+
+# =========================================================
+# Imports
+# =========================================================
+
 import re
 
 
+# =========================================================
+# ATS Stopword Library
+# =========================================================
+
 STOPWORDS = {
-    "the", "and", "for", "with", "from", "that", "this", "will", "into", "across",
-    "their", "about", "while", "where", "which", "have", "has", "had", "been",
-    "being", "were", "was", "are", "is", "as", "at", "by", "to", "of", "in", "on",
-    "or", "an", "a", "be", "it", "its", "than", "then", "them", "they", "he",
-    "she", "you", "your", "our", "we", "us", "responsible", "responsibilities",
-    "requirements", "required", "seeking", "experienced", "strong", "closely",
-    "company", "organization", "growing", "guide", "making", "based", "team",
-    "background", "drive", "work", "leader", "leaders", "large", "improve",
-    "partner", "partners", "oversee", "knowledge", "projects", "fast-growing",
-    "decision-making", "manage", "managing", "lead", "mentor", "recruit"
+    # Basic language words
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
+    "in", "is", "it", "of", "on", "or", "that", "the", "to", "with",
+    "will", "this", "these", "those", "their", "there", "its",
+
+    # Common job posting filler words
+    "role", "position", "candidate", "successful", "strong",
+    "ability", "abilities", "skills", "skill", "knowledge",
+    "experience", "experiences", "background", "responsibilities",
+    "responsibility", "require", "requires", "required",
+    "including", "include", "includes",
+
+    # Common business filler language
+    "support", "supporting", "provide", "providing", "help",
+    "helping", "assist", "assisting", "ensure", "ensuring",
+    "maintain", "maintaining", "enable", "enabling",
+
+    # Generic action verbs (low ATS value)
+    "build", "building", "lead", "leading", "drive", "driving",
+    "deliver", "delivering", "improve", "improving",
+    "optimize", "optimizing", "develop", "developing",
+
+    # Generic success language
+    "success", "successful", "results", "result",
+    "growth", "growing",
+
+    # Job description structure words
+    "team", "teams", "company", "organization",
+    "across", "within", "environment", "environmental",
+
+    # Misc filler from tests
+    "work", "working", "based", "seeking", "closely",
+
+    # Weak ATS filler words identified during testing
+    "responsible", "through", "protecting", "conduct", "implement", "improvements",
 }
 
-IMPORTANT_KEYWORDS = {
-    "engineering", "architecture", "cloud", "distributed", "kubernetes", "docker",
-    "devops", "platform", "microservices", "scalability", "reliability", "ci/cd",
-    "technical", "leadership", "systems", "infrastructure", "agile", "api"
-}
 
+# =========================================================
+# Keyword Normalization Helpers
+# =========================================================
 
-def normalize_text(text: str) -> list[str]:
-    text = text.lower()
-    text = text.replace("ci/cd", "cicd")
-    text = text.replace("cloud-based", "cloud")
-    text = text.replace("decision-making", "decisionmaking")
-    return re.findall(r"\b[a-zA-Z][a-zA-Z+\-/&]{2,}\b", text)
+def normalize_word(word: str) -> str:
+    """
+    Normalize words for ATS matching without making displayed keywords ugly.
 
+    Goals:
+    - manage / managed / managing -> manage
+    - partner / partnered / partnering -> partner
+    - strategy / strategies -> strategy
+    - keep words like business, success, operations readable
 
-def normalize_keyword(word: str) -> str:
-    word = word.lower()
-    word = word.replace("ci/cd", "cicd")
-    word = word.replace("cloud-based", "cloud")
-    word = word.replace("decision-making", "decisionmaking")
+    Notes:
+    - This is intentionally lightweight and deterministic for MVP use.
+    - The frontend still displays cleaner keyword variants using display_map.
+    """
+    word = word.lower().strip()
+    word = word.replace("’", "").replace("'", "")
+
+    # Skip very short words early
+    if len(word) <= 3:
+        return word
+
+    # Convert plural "ies" to singular "y"
+    # Example: strategies -> strategy
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"
+
+    # Convert "ing" forms where reasonable
+    # Example: managing -> manage
+    if word.endswith("ing") and len(word) > 5:
+        base = word[:-3]
+        if not base.endswith("e"):
+            if base.endswith(("ag", "at", "iz", "ur")):
+                return base + "e"
+        return base
+
+    # Convert "ed" forms where reasonable
+    # Example: managed -> manage
+    if word.endswith("ed") and len(word) > 4:
+        base = word[:-2]
+        if not base.endswith("e"):
+            if base.endswith(("ag", "at", "iz", "ur")):
+                return base + "e"
+        return base
+
+    # Safer plural handling for "es"
+    # Example: classes -> class, processes -> process
+    if word.endswith("es") and len(word) > 4:
+        if word.endswith(("sses", "shes", "ches", "xes", "zes")):
+            return word[:-2]
+
+        # Avoid breaking words like "business"
+        if not word.endswith("ness"):
+            return word[:-1]
+
+    # Safer singular handling for trailing "s"
+    if word.endswith("s") and len(word) > 4:
+        # Keep words like business, status, analysis
+        if not word.endswith(("ss", "us", "is", "ness")):
+            return word[:-1]
+
     return word
 
 
-def calculate_ats_score(resume_data, job_description):
-    resume_parts = []
+# =========================================================
+# Keyword Extraction Logic
+# =========================================================
 
-    resume_parts.append(resume_data.get("professional_summary", ""))
+def extract_keywords(text: str) -> tuple[set[str], dict[str, str]]:
+    """
+    Extract meaningful keywords from text while removing stopwords and
+    normalizing variants.
+
+    Returns:
+    - normalized keyword set for matching
+    - display map so UI shows clean words instead of stems
+
+    Example:
+    Input text:
+        "Managing operations and reporting metrics"
+    Output:
+        normalized_keywords -> {"manage", "operation", "report", "metric"}
+        display_map -> maps normalized form back to a cleaner source token
+    """
+    words = re.findall(r"\b[a-zA-Z][a-zA-Z\-&/]*\b", text.lower())
+
+    normalized_keywords = set()
+    display_map = {}
+
+    for raw_word in words:
+        if len(raw_word) <= 2:
+            continue
+
+        # Skip raw stopwords immediately
+        if raw_word in STOPWORDS:
+            continue
+
+        normalized = normalize_word(raw_word)
+
+        # Skip normalized stopwords too
+        if normalized in STOPWORDS:
+            continue
+
+        if len(normalized) <= 2:
+            continue
+
+        normalized_keywords.add(normalized)
+
+        # Prefer shorter / cleaner display keyword for UI presentation
+        if normalized not in display_map:
+            display_map[normalized] = raw_word
+        else:
+            current = display_map[normalized]
+            if len(raw_word) < len(current):
+                display_map[normalized] = raw_word
+
+    return normalized_keywords, display_map
+
+
+# =========================================================
+# Resume Flattening Logic
+# =========================================================
+
+def resume_to_text(resume_data: dict) -> str:
+    """
+    Flatten structured resume JSON into a single text blob for ATS analysis.
+
+    This allows the ATS scorer to compare:
+    - professional summary
+    - skills
+    - job titles
+    - employer names
+    - experience bullets
+    - education
+    - certifications
+
+    against the target job description.
+    """
+    parts = []
+
+    parts.append(resume_data.get("full_name", ""))
+    parts.append(resume_data.get("location", ""))
+    parts.append(resume_data.get("phone", ""))
+    parts.append(resume_data.get("email", ""))
+    parts.append(resume_data.get("professional_summary", ""))
 
     for skill in resume_data.get("skills", []):
-        resume_parts.append(skill)
+        parts.append(skill)
 
     for role in resume_data.get("professional_experience", []):
-        resume_parts.append(role.get("company", ""))
-        resume_parts.append(role.get("title", ""))
+        parts.append(role.get("company", ""))
+        parts.append(role.get("title", ""))
         for bullet in role.get("description", []):
-            resume_parts.append(bullet)
+            parts.append(bullet)
 
-    for item in resume_data.get("education", []):
-        resume_parts.append(item)
+    for edu in resume_data.get("education", []):
+        parts.append(edu)
 
-    for item in resume_data.get("certifications", []):
-        resume_parts.append(item)
+    for cert in resume_data.get("certifications", []):
+        parts.append(cert)
 
-    resume_text = " ".join(resume_parts)
-    resume_words = set(normalize_text(resume_text))
+    return " ".join(parts)
 
-    raw_job_words = normalize_text(job_description)
 
-    filtered_job_keywords = []
-    for word in raw_job_words:
-        normalized = normalize_keyword(word)
-        if normalized not in STOPWORDS and len(normalized) >= 4:
-            filtered_job_keywords.append(normalized)
+# =========================================================
+# ATS Scoring Logic
+# =========================================================
 
-    unique_job_keywords = sorted(set(filtered_job_keywords))
+def calculate_ats_score(resume_data: dict, job_description: str) -> dict:
+    """
+    Compare resume vs job description using normalized keywords
+    while returning cleaner display keywords for the UI.
 
-    matched = []
-    missing = []
+    Returns response shape expected by the frontend:
+    {
+        "ats_score": int,
+        "matched_keywords": list[str],
+        "missing_keywords": list[str]
+    }
 
-    weighted_total = 0
-    weighted_score = 0
+    Scoring logic:
+    - score = matched keyword count / total JD keyword count * 100
+    - simple deterministic ATS scoring for MVP stability
+    """
+    resume_text = resume_to_text(resume_data)
 
-    for keyword in unique_job_keywords:
-        weight = 2 if keyword in IMPORTANT_KEYWORDS or keyword.replace("cicd", "ci/cd") in IMPORTANT_KEYWORDS else 1
-        weighted_total += weight
+    resume_keywords, resume_display = extract_keywords(resume_text)
+    job_keywords, job_display = extract_keywords(job_description)
 
-        if keyword in resume_words:
-            matched.append(keyword)
-            weighted_score += weight
-        else:
-            missing.append(keyword)
+    matched_normalized = sorted(resume_keywords.intersection(job_keywords))
+    missing_normalized = sorted(job_keywords - resume_keywords)
 
-    if weighted_total == 0:
+    # Use the job description display form for cleaner UI output
+    matched = [job_display.get(word, word) for word in matched_normalized]
+    missing = [job_display.get(word, word) for word in missing_normalized]
+
+    if len(job_keywords) == 0:
         score = 0
     else:
-        score = int((weighted_score / weighted_total) * 100)
-
-    # Small realism boost for strong structured resumes
-    has_summary = bool(resume_data.get("professional_summary"))
-    has_skills = len(resume_data.get("skills", [])) >= 8
-    has_experience = len(resume_data.get("professional_experience", [])) >= 2
-
-    if has_summary and has_skills and has_experience:
-        score = min(score + 5, 100)
+        score = int((len(matched_normalized) / len(job_keywords)) * 100)
 
     return {
         "ats_score": score,
-        "matched_keywords": matched[:20],
-        "missing_keywords": missing[:20]
+        "matched_keywords": matched,
+        "missing_keywords": missing,
     }
