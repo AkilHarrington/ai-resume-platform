@@ -101,21 +101,177 @@ const coverLetterPreview = document.getElementById("coverLetterPreview");
 // CONFIGURATION
 // =========================================================
 
-const isLocal =
-  window.location.protocol === "file:" ||
-  window.location.hostname === "127.0.0.1" ||
-  window.location.hostname === "localhost" ||
-  window.location.hostname === "";
-
-const API_BASE_URL = isLocal
-  ? "http://127.0.0.1:8000"
-  : "https://ai-resume-platform-eluf.onrender.com";
+const API_BASE_URL = "http://localhost:3000/api/resume";
 
 const TEMPLATE_NOTES = {
   professional: "Professional — Classic, compact, ATS-safe",
   modern: "Modern — Clean, contemporary, title under name",
   executive: "Executive — Premium, strongest hierarchy, leadership style"
 };
+
+// =========================================================
+// BACKEND INTEGRATION HELPERS
+// =========================================================
+
+/*
+Purpose:
+Bridge the legacy MVP frontend structure to the new
+TypeScript backend API.
+
+Why this exists:
+- Current HTML form is structured by fields
+- New backend currently expects rawText
+- Current renderers expect older frontend-friendly shapes
+
+So this layer:
+1. composes rawText from the form
+2. calls the new backend
+3. adapts backend responses into shapes the current UI can render
+*/
+
+function composeRawResumeText(formData) {
+  const sections = [];
+
+  const basics = [
+    formData.name,
+    formData.email,
+    formData.phone,
+    formData.location
+  ].filter(Boolean);
+
+  if (basics.length) {
+    sections.push(basics.join(" | "));
+  }
+
+  if (formData.skills) {
+    sections.push("SKILLS");
+    sections.push(formData.skills);
+  }
+
+  if (formData.experience) {
+    sections.push("EXPERIENCE");
+    sections.push(formData.experience);
+  }
+
+  if (formData.education) {
+    sections.push("EDUCATION");
+    sections.push(formData.education);
+  }
+
+  if (formData.certifications) {
+    sections.push("CERTIFICATIONS");
+    sections.push(formData.certifications);
+  }
+
+  return sections.join("\n\n").trim();
+}
+
+async function postResumeApi(path, payload) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data?.error || `Request failed with status ${response.status}`);
+  }
+
+  return data;
+}
+
+async function scanResumeRequest(rawText) {
+  return postResumeApi("/scan", { rawText });
+}
+
+async function optimizeResumeRequest(rawText) {
+  return postResumeApi("/optimize", { rawText });
+}
+
+function adaptContentJsonToPreviewResume(contentJson) {
+  return {
+    full_name: contentJson?.basics?.fullName || "",
+    email: contentJson?.basics?.email || "",
+    phone: contentJson?.basics?.phone || "",
+    location: contentJson?.basics?.location || "",
+    professional_summary: contentJson?.summary || "",
+
+    skills: [
+      ...(contentJson?.skills?.core || []),
+      ...(contentJson?.skills?.technical || []),
+      ...(contentJson?.skills?.tools || []),
+      ...(contentJson?.skills?.soft || [])
+    ],
+
+    professional_experience: (contentJson?.experience || []).map(item => {
+      const rawCompany = item.company || "";
+      const rawTitle = item.title || "";
+
+      let company = rawCompany;
+      let title = rawTitle;
+
+      if (!company && title.includes("—")) {
+        const parts = title.split("—").map(part => part.trim()).filter(Boolean);
+
+        if (parts.length >= 2) {
+          title = parts[0];
+          company = parts.slice(1).join(" — ");
+        }
+      }
+
+      if (!company && title.includes("-")) {
+        const parts = title.split("-").map(part => part.trim()).filter(Boolean);
+
+        if (parts.length >= 2) {
+          title = parts[0];
+          company = parts.slice(1).join(" - ");
+        }
+      }
+
+      return {
+        company,
+        title,
+        description: item.bullets || []
+      };
+    }),
+
+    education: (contentJson?.education || []).map(item => {
+      return [item.institution, item.credential, item.fieldOfStudy]
+        .filter(Boolean)
+        .join(" — ");
+    }),
+
+    certifications: (contentJson?.certifications || []).map(item => {
+      return [item.name, item.issuer]
+        .filter(Boolean)
+        .join(" — ");
+    })
+  };
+}
+
+function adaptScoringToAtsAnalysis(scoring) {
+  const scoreSnapshot = scoring?.scoreSnapshot || {};
+
+  return {
+    ats_score: scoreSnapshot.overall || 0,
+    matched_keywords: [],
+    missing_keywords: [],
+    issues: scoring?.issues || [],
+    recommendations: scoring?.recommendations || [],
+    rulesTriggered: scoring?.rulesTriggered || {}
+  };
+}
+
+function adaptComparisonScoresForUI(originalScoring, optimizedScoring) {
+  return {
+    original: adaptScoringToAtsAnalysis(originalScoring),
+    improved: adaptScoringToAtsAnalysis(optimizedScoring)
+  };
+}
 
 // =========================================================
 // FRONTEND STATE
@@ -144,10 +300,24 @@ function premiumBlockedMessage() {
 function setActivePackage(pkg) {
   currentPackage = pkg;
 
+  if (pkg === "pro") {
+    localStorage.setItem("pro_user", "true");
+  } else {
+    localStorage.removeItem("pro_user");
+  }
+
   freePackageCard.classList.toggle("active", pkg === "free");
   proPackageCard.classList.toggle("active", pkg === "pro");
 
   updatePremiumLocks();
+
+  // If user is free, force professional template.
+  // If user is pro, keep currently selected template.
+  if (!isPro()) {
+    forceTemplateSelection("professional");
+  } else {
+    forceTemplateSelection(templateSelect.value || "professional");
+  }
 }
 
 function updatePremiumLocks() {
@@ -167,9 +337,6 @@ function updatePremiumLocks() {
 
   if (locked) {
     upgradeNotice.classList.remove("hidden");
-    if (templateSelect.value !== "professional") {
-      setActiveTemplateCard("professional");
-    }
   } else {
     upgradeNotice.classList.add("hidden");
   }
@@ -179,18 +346,24 @@ function updatePremiumLocks() {
 // TEMPLATE SELECTION LOGIC
 // =========================================================
 
-function setActiveTemplateCard(template) {
-  if (!isPro() && template !== "professional") {
-    premiumBlockedMessage();
-    return;
-  }
-
+function forceTemplateSelection(template) {
   templateCards.forEach(card => {
     card.classList.toggle("active", card.dataset.template === template);
   });
 
   templateSelect.value = template;
-  templateNote.textContent = TEMPLATE_NOTES[template] || TEMPLATE_NOTES.professional;
+  templateNote.textContent =
+    TEMPLATE_NOTES[template] || TEMPLATE_NOTES.professional;
+}
+
+function setActiveTemplateCard(template) {
+  if (!isPro() && template !== "professional") {
+    premiumBlockedMessage();
+    forceTemplateSelection("professional");
+    return;
+  }
+
+  forceTemplateSelection(template);
 }
 
 // =========================================================
@@ -377,49 +550,74 @@ function renderResumePreview(resume, template = "professional", keywords = []) {
   previewCard.innerHTML = `
     <div class="preview-header">
       <h3>${escapeHtml(resume.full_name || "")}</h3>
-      ${showSubtitle && subtitle ? `<div class="preview-subtitle">${highlightText(subtitle, keywords)}</div>` : ""}
+      ${
+        showSubtitle && subtitle
+          ? `<div class="preview-subtitle">${highlightText(subtitle, keywords)}</div>`
+          : ""
+      }
       <div class="preview-contact">
-        ${[resume.location, resume.phone, resume.email]
-          .filter(Boolean)
+        ${Array.from(
+          new Set([resume.location, resume.phone, resume.email].filter(Boolean))
+        )
           .map(value => escapeHtml(value))
           .join(" | ")}
       </div>
     </div>
 
-    ${resume.professional_summary ? `
+    ${
+      resume.professional_summary
+        ? `
       <div class="preview-section">
         <h4>Professional Summary</h4>
         <p>${highlightText(resume.professional_summary, keywords)}</p>
       </div>
-    ` : ""}
+    `
+        : ""
+    }
 
-    ${(resume.skills || []).length ? `
+    ${
+      (resume.skills || []).length
+        ? `
       <div class="preview-section">
         <h4>Skills</h4>
         ${renderSkills(resume.skills, template, keywords)}
       </div>
-    ` : ""}
+    `
+        : ""
+    }
 
-    ${(resume.professional_experience || []).length ? `
+    ${
+      (resume.professional_experience || []).length
+        ? `
       <div class="preview-section">
         <h4>Professional Experience</h4>
         ${renderExperience(resume.professional_experience, template, keywords)}
       </div>
-    ` : ""}
+    `
+        : ""
+    }
 
-    ${(resume.education || []).length ? `
+    ${
+      (resume.education || []).length
+        ? `
       <div class="preview-section">
         <h4>Education</h4>
         ${renderList(resume.education, keywords)}
       </div>
-    ` : ""}
+    `
+        : ""
+    }
 
-    ${(resume.certifications || []).length ? `
+    ${
+      (resume.certifications || []).length
+        ? `
       <div class="preview-section">
         <h4>Certifications</h4>
         ${renderList(resume.certifications, keywords)}
       </div>
-    ` : ""}
+    `
+        : ""
+    }
   `;
 }
 
@@ -442,20 +640,26 @@ function renderATS(analysis) {
   matchedKeywords.innerHTML = renderKeywordPills(analysis.matched_keywords, "matched");
   missingKeywords.innerHTML = renderKeywordPills(analysis.missing_keywords, "missing");
 
-  keywordStatus.classList.remove("hidden", "keyword-status-success", "keyword-status-info");
+keywordStatus.classList.remove("hidden", "keyword-status-success", "keyword-status-info");
 
-  if (
-    analysis.ats_score === 100 ||
-    !analysis.missing_keywords ||
-    analysis.missing_keywords.length === 0
-  ) {
-    keywordStatus.textContent = "All key job description keywords are covered ✓";
-    keywordStatus.classList.add("keyword-status-success");
-    missingKeywords.innerHTML = "";
-  } else {
-    keywordStatus.textContent = `Still missing ${analysis.missing_keywords.length} job-description keyword(s).`;
-    keywordStatus.classList.add("keyword-status-info");
-  }
+const hasKeywordArrays =
+  Array.isArray(analysis.matched_keywords) &&
+  Array.isArray(analysis.missing_keywords) &&
+  (analysis.matched_keywords.length > 0 || analysis.missing_keywords.length > 0);
+
+if (!hasKeywordArrays) {
+  keywordStatus.textContent =
+    "Detailed job-description keyword matching is not yet enabled in this build.";
+  keywordStatus.classList.add("keyword-status-info");
+  matchedKeywords.innerHTML = "";
+  missingKeywords.innerHTML = "";
+} else if (analysis.missing_keywords.length === 0) {
+  keywordStatus.textContent = "All detected job-description keywords are covered ✓";
+  keywordStatus.classList.add("keyword-status-success");
+} else {
+  keywordStatus.textContent = `Still missing ${analysis.missing_keywords.length} job-description keyword(s).`;
+  keywordStatus.classList.add("keyword-status-info");
+}
 }
 
 function renderScoreComparison(beforeScore, afterScore) {
@@ -526,6 +730,18 @@ function renderSkillGapAnalysis(matched, missing) {
   const strong = safeMatched.slice(0, Math.min(6, safeMatched.length));
   const partial = safeMatched.slice(6, 10);
   const gaps = safeMissing.slice(0, 8);
+
+  const hasRealSkillData =
+  Array.isArray(matched) &&
+  Array.isArray(missing) &&
+  (matched.length > 0 || missing.length > 0);
+
+if (!hasRealSkillData) {
+  strongSkills.innerHTML = `<span class="skill-pill skill-strong">Detailed skill matching will be enabled with JD-aware scoring</span>`;
+  partialSkills.innerHTML = `<span class="skill-pill skill-partial">Current build focuses on general resume scoring</span>`;
+  missingSkills.innerHTML = `<span class="skill-pill skill-missing">Skill gap detection is deferred for a later phase</span>`;
+  return;
+}
 
   strong.forEach(skill => {
     strongSkills.innerHTML += `<span class="skill-pill skill-strong">${escapeHtml(skill)}</span>`;
@@ -638,24 +854,58 @@ function renderResumeComparison(originalResume, improvedResume) {
 
 function renderRewriteExplanations(originalResume, improvedResume, originalAnalysis, improvedAnalysis) {
   const explanations = [];
-  const originalMatched = new Set(originalAnalysis.matched_keywords || []);
-  const improvedMatched = new Set(improvedAnalysis.matched_keywords || []);
-  const addedKeywords = [...improvedMatched].filter(keyword => !originalMatched.has(keyword));
 
-  if (addedKeywords.length > 0) {
+  const originalSummary = originalResume.professional_summary || "";
+  const improvedSummary = improvedResume.professional_summary || "";
+
+  const originalSkills = JSON.stringify(originalResume.skills || []);
+  const improvedSkills = JSON.stringify(improvedResume.skills || []);
+
+  const originalBullets = (originalResume.professional_experience || [])
+    .flatMap(role => role.description || []);
+  const improvedBullets = (improvedResume.professional_experience || [])
+    .flatMap(role => role.description || []);
+
+  const bulletsChanged =
+    JSON.stringify(originalBullets) !== JSON.stringify(improvedBullets);
+
+  const scoreBefore = originalAnalysis.ats_score || 0;
+  const scoreAfter = improvedAnalysis.ats_score || 0;
+
+  if (improvedSummary !== originalSummary) {
     explanations.push(
-      `The optimized resume added stronger job-aligned language, including keywords such as ${addedKeywords.slice(0, 4).join(", ")}.`
+      "The professional summary was rewritten to improve positioning and better reflect the candidate’s strengths."
     );
   }
 
-  if ((improvedResume.professional_summary || "") !== (originalResume.professional_summary || "")) {
-    explanations.push("The professional summary was rewritten to match the target role more directly and communicate stronger business relevance.");
+  if (improvedSkills !== originalSkills) {
+    explanations.push(
+      "The skills section was cleaned and normalized to improve readability and consistency."
+    );
   }
 
-  explanations.push("Experience bullets were rewritten to sound more results-focused and better aligned with the employer’s priorities.");
-  explanations.push("The updated resume improves ATS alignment without changing the overall credibility of the candidate’s background.");
+  if (bulletsChanged) {
+    explanations.push(
+      "Experience bullets were refined to improve clarity, stronger phrasing, and overall presentation."
+    );
+  }
 
-  rewriteExplanationList.innerHTML = explanations.map(item => `<li>${escapeHtml(item)}</li>`).join("");
+  if (scoreAfter > scoreBefore) {
+    explanations.push(
+      `The optimized version improved the overall resume score by ${scoreAfter - scoreBefore} point${scoreAfter - scoreBefore === 1 ? "" : "s"}.`
+    );
+  }
+
+  if (explanations.length === 0) {
+    explanations.push(
+      "The optimized version preserved most original content because the system did not detect enough grounded evidence to justify stronger rewrites."
+    );
+  }
+
+  rewriteExplanationList.innerHTML = explanations
+    .map(item => `<li>${escapeHtml(item)}</li>`)
+    .join("");
+
   rewriteExplanationPanel.classList.remove("hidden");
 }
 
@@ -774,73 +1024,36 @@ function renderCoverLetter(text) {
 // =========================================================
 
 async function downloadFile(endpoint, filename) {
-  if (!latestFormData) {
-    setStatus("Generate a resume preview before downloading files.", "error");
-    return;
-  }
-
-  if (!isPro()) {
-    premiumBlockedMessage();
-    return;
-  }
-
-  downloadPdfBtn.disabled = true;
-  downloadDocxBtn.disabled = true;
-  improveResumeBtn.disabled = true;
-  generateCoverLetterBtn.disabled = true;
-  downloadCoverLetterBtn.disabled = true;
-  showLoading(`Preparing ${filename}...`);
-  setStatus("", "info");
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(latestFormData)
-    });
-
-    if (!response.ok) throw new Error(`Download failed with status ${response.status}`);
-
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    window.URL.revokeObjectURL(url);
-    setStatus(`${filename} downloaded successfully.`, "success");
-  } catch (error) {
-    console.error(error);
-    setStatus(getErrorMessage(error, `Unable to download ${filename}. Please try again.`), "error");
-  } finally {
-    hideLoading();
-    downloadPdfBtn.disabled = false;
-    downloadDocxBtn.disabled = false;
-    improveResumeBtn.disabled = false;
-    generateCoverLetterBtn.disabled = false;
-    downloadCoverLetterBtn.disabled = false;
-  }
+  setStatus(
+    `${filename} download is not yet connected to the new backend build.`,
+    "error"
+  );
 }
 
 // =========================================================
 // EVENT LISTENER REGISTRATION
 // =========================================================
 
-freePackageCard.addEventListener("click", () => setActivePackage("free"));
-proPackageCard.addEventListener("click", () => setActivePackage("pro"));
+freePackageCard.addEventListener("click", event => {
+  event.preventDefault();
+  setActivePackage("free");
+});
+
+proPackageCard.addEventListener("click", event => {
+  event.preventDefault();
+  setActivePackage("pro");
+});
 
 templateCards.forEach(card => {
-  card.addEventListener("click", () => {
-    setActiveTemplateCard(card.dataset.template);
+  card.addEventListener("click", event => {
+    event.preventDefault();
+    const template = card.dataset.template;
+    setActiveTemplateCard(template);
   });
 });
 
+// Initialize UI from saved package state
 setActivePackage(currentPackage);
-setActiveTemplateCard(isPro() ? templateSelect.value || "professional" : "professional");
 
 // =========================================================
 // API EVENT HANDLERS
@@ -850,9 +1063,10 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   latestFormData = getFormData();
+  const rawText = composeRawResumeText(latestFormData);
 
   generateBtn.disabled = true;
-  generateBtn.textContent = "Generating...";
+  generateBtn.textContent = "Scanning...";
   actions.classList.add("hidden");
   atsPanel.classList.add("hidden");
   resetScoreComparison();
@@ -862,37 +1076,38 @@ form.addEventListener("submit", async (event) => {
   resetResumeComparison();
   resetRewriteExplanations();
   resetCoverLetter();
-  showLoading("Generating resume and analyzing ATS match...");
+  showLoading("Parsing and scoring resume...");
   setStatus("", "info");
 
   try {
-    const response = await fetch(`${API_BASE_URL}/ats-score`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(latestFormData)
-    });
+    const result = await scanResumeRequest(rawText);
 
-    if (!response.ok) throw new Error(`Preview generation failed with status ${response.status}`);
+    const parser = result.data.parser;
+    const scoring = result.data.scoring;
 
-    const result = await response.json();
+    const adaptedResume = adaptContentJsonToPreviewResume(
+      parser.contentJson
+    );
+    const adaptedAnalysis = adaptScoringToAtsAnalysis(scoring);
 
-    renderATS(result.ats_analysis);
-    renderResumePreview(result.resume, latestFormData.template, latestMatchedKeywords);
+    renderATS(adaptedAnalysis);
+    renderResumePreview(
+      adaptedResume,
+      latestFormData.template,
+      latestMatchedKeywords
+    );
 
     if (isPro()) {
-      renderSkillGapAnalysis(
-        result.ats_analysis.matched_keywords,
-        result.ats_analysis.missing_keywords
-      );
-      renderResumeStrengthMeter(result.ats_analysis, result.resume);
+      renderSkillGapAnalysis([], []);
+      renderResumeStrengthMeter(adaptedAnalysis, adaptedResume);
     }
 
     actions.classList.remove("hidden");
-    setStatus("Resume preview generated successfully.", "success");
+    setStatus("Resume scan completed successfully.", "success");
   } catch (error) {
     console.error(error);
     setStatus(
-      getErrorMessage(error, "Unable to generate the resume preview. Please try again in a moment."),
+      getErrorMessage(error, "Unable to scan the resume right now. Please try again."),
       "error"
     );
   } finally {
@@ -913,56 +1128,74 @@ improveResumeBtn.addEventListener("click", async () => {
     return;
   }
 
+  const rawText = composeRawResumeText(latestFormData);
+
   improveResumeBtn.disabled = true;
   generateBtn.disabled = true;
   downloadPdfBtn.disabled = true;
   downloadDocxBtn.disabled = true;
   generateCoverLetterBtn.disabled = true;
   downloadCoverLetterBtn.disabled = true;
-  showLoading("Optimizing resume and recalculating ATS score...");
+  showLoading("Optimizing resume and comparing improvements...");
   setStatus("", "info");
 
   try {
-    const response = await fetch(`${API_BASE_URL}/optimize-resume`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(latestFormData)
-    });
+    const result = await optimizeResumeRequest(rawText);
 
-    if (!response.ok) throw new Error(`Optimization failed with status ${response.status}`);
+    const parser = result.data.parser;
+    const originalScoring = result.data.originalScoring;
+    const optimizer = result.data.optimizer;
+    const optimizedScoring = result.data.optimizedScoring;
+    const comparison = result.data.comparison;
 
-    const result = await response.json();
-
-    renderATS(result.improved_ats_analysis);
-    renderSkillGapAnalysis(
-      result.improved_ats_analysis.matched_keywords,
-      result.improved_ats_analysis.missing_keywords
+    const originalResume = adaptContentJsonToPreviewResume(
+      parser.contentJson
     );
-    renderResumeStrengthMeter(result.improved_ats_analysis, result.improved_resume);
-    renderResumePreview(result.improved_resume, latestFormData.template, latestMatchedKeywords);
+    const improvedResume = adaptContentJsonToPreviewResume(
+      optimizer.optimizedContentJson
+    );
+
+    const adaptedOriginalAnalysis = adaptScoringToAtsAnalysis(originalScoring);
+    const adaptedImprovedAnalysis = adaptScoringToAtsAnalysis(optimizedScoring);
+
+    renderATS(adaptedImprovedAnalysis);
+    renderSkillGapAnalysis([], []);
+    renderResumeStrengthMeter(adaptedImprovedAnalysis, improvedResume);
+    renderResumePreview(
+      improvedResume,
+      latestFormData.template,
+      latestMatchedKeywords
+    );
+
     renderScoreComparison(
-      result.original_ats_analysis.ats_score,
-      result.improved_ats_analysis.ats_score
+      comparison.score.before,
+      comparison.score.after
     );
+
     renderImprovementSummary(
-      result.original_ats_analysis,
-      result.improved_ats_analysis
+      adaptedOriginalAnalysis,
+      adaptedImprovedAnalysis
     );
+
     renderResumeComparison(
-      result.original_resume,
-      result.improved_resume
+      originalResume,
+      improvedResume
     );
+
     renderRewriteExplanations(
-      result.original_resume,
-      result.improved_resume,
-      result.original_ats_analysis,
-      result.improved_ats_analysis
+      originalResume,
+      improvedResume,
+      adaptedOriginalAnalysis,
+      adaptedImprovedAnalysis
     );
 
     setStatus("Resume improved successfully.", "success");
   } catch (error) {
     console.error(error);
-    setStatus(getErrorMessage(error, "Unable to improve the resume right now. Please try again."), "error");
+    setStatus(
+      getErrorMessage(error, "Unable to improve the resume right now. Please try again."),
+      "error"
+    );
   } finally {
     hideLoading();
     improveResumeBtn.disabled = false;
@@ -975,50 +1208,15 @@ improveResumeBtn.addEventListener("click", async () => {
 });
 
 generateCoverLetterBtn.addEventListener("click", async () => {
-  if (!latestFormData) {
-    setStatus("Generate a resume preview before creating a cover letter.", "error");
-    return;
-  }
-
   if (!isPro()) {
     premiumBlockedMessage();
     return;
   }
 
-  generateCoverLetterBtn.disabled = true;
-  generateBtn.disabled = true;
-  improveResumeBtn.disabled = true;
-  downloadPdfBtn.disabled = true;
-  downloadDocxBtn.disabled = true;
-  downloadCoverLetterBtn.disabled = true;
-  showLoading("Generating cover letter...");
-  setStatus("", "info");
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/generate-cover-letter`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(latestFormData)
-    });
-
-    if (!response.ok) throw new Error(`Cover letter generation failed with status ${response.status}`);
-
-    const result = await response.json();
-
-    renderCoverLetter(result.cover_letter);
-    setStatus("Cover letter generated successfully.", "success");
-  } catch (error) {
-    console.error(error);
-    setStatus(getErrorMessage(error, "Unable to generate the cover letter right now. Please try again."), "error");
-  } finally {
-    hideLoading();
-    generateCoverLetterBtn.disabled = false;
-    generateBtn.disabled = false;
-    improveResumeBtn.disabled = false;
-    downloadPdfBtn.disabled = false;
-    downloadDocxBtn.disabled = false;
-    downloadCoverLetterBtn.disabled = false;
-  }
+  setStatus(
+    "Cover letter generation is not yet connected to the new backend build.",
+    "error"
+  );
 });
 
 downloadPdfBtn.addEventListener("click", async () => {
@@ -1038,20 +1236,8 @@ downloadCoverLetterBtn.addEventListener("click", async () => {
 // =========================================================
 
 upgradeBtn.addEventListener("click", async () => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/create-checkout-session`, {
-      method: "POST"
-    });
-
-    const data = await response.json();
-
-    if (data.url) {
-      window.location.href = data.url;
-    } else {
-      setStatus("Checkout session did not return a valid payment URL.", "error");
-    }
-  } catch (error) {
-    console.error("Checkout error:", error);
-    setStatus("Unable to start checkout. Please try again.", "error");
-  }
+  setStatus(
+    "Checkout is not yet connected to the new backend build.",
+    "error"
+  );
 });

@@ -1,33 +1,14 @@
-/**
- * =========================================================
- * SERVER ENTRYPOINT
- * =========================================================
- *
- * PURPOSE:
- *
- * This file starts the Express server and mounts the API.
- *
- * =========================================================
- */
-
 import express from 'express';
+import cors from 'cors';
 import apiRouter from './api';
 
 const app = express();
 
-/**
- * Parse JSON bodies
- */
+app.use(cors());
 app.use(express.json());
 
-/**
- * Mount API routes
- */
 app.use('/api', apiRouter);
 
-/**
- * Health check route
- */
 app.get('/', (_, res) => {
   res.json({
     status: 'AI Resume Platform API running',
