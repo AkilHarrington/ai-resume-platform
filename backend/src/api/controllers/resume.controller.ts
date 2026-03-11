@@ -33,6 +33,8 @@
 
 import type { Request, Response } from 'express';
 import { runResumeIntelligence } from '../../services/resume-intelligence/resume-intelligence-orchestrator';
+import { parseResumeText } from '../../services/resume-parser/parser-pipeline';
+import { scoreResume } from '../../services/resume-scoring/scoring-pipeline';
 
 
 /**
@@ -99,6 +101,68 @@ export function optimizeResumeController(
     res.status(500).json({
       success: false,
       error: 'Failed to process resume intelligence pipeline.',
+    });
+  }
+}
+
+/**
+ * ---------------------------------------------------------
+ * POST /api/resume/scan
+ * ---------------------------------------------------------
+ *
+ * Runs the lightweight resume scan pipeline:
+ *
+ *   parse → score
+ *
+ * Request body:
+ * {
+ *   rawText: string
+ * }
+ *
+ * Response:
+ * {
+ *   success: true,
+ *   data: {
+ *     parser: ...,
+ *     scoring: ...
+ *   }
+ * }
+ */
+export function scanResumeController(
+  req: Request<unknown, unknown, OptimizeResumeRequestBody>,
+  res: Response,
+): void {
+  try {
+    const rawText = req.body?.rawText?.trim();
+
+    if (!rawText) {
+      res.status(400).json({
+        success: false,
+        error: 'rawText is required.',
+      });
+      return;
+    }
+
+    const parser = parseResumeText({ rawText });
+
+    const scoring = scoreResume({
+      rawText,
+      contentJson: parser.output.contentJson,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        parser: parser.output,
+        scoring,
+      },
+    });
+  } catch (error) {
+    console.error('scanResumeController error:', error);
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process resume scan pipeline.',
     });
   }
 }

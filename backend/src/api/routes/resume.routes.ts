@@ -17,7 +17,10 @@
  */
 
 import { Router } from 'express';
-import { optimizeResumeController } from '../controllers/resume.controller';
+import {
+  optimizeResumeController,
+  scanResumeController,
+} from '../controllers/resume.controller';
 
 const router = Router();
 
@@ -28,3 +31,8 @@ const router = Router();
 router.post('/optimize', optimizeResumeController);
 
 export default router;
+
+/**
+ * Run lightweight resume scan pipeline.
+ */
+router.post('/scan', scanResumeController);
