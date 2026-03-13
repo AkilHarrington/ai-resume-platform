@@ -39,6 +39,7 @@ import { parseResumeText } from '../resume-parser/parser-pipeline';
 import { scoreResume } from '../resume-scoring/scoring-pipeline';
 import { optimizeResume } from '../resume-optimizer/optimizer-pipeline';
 import { compareResumes } from '../resume-comparison/comparison-pipeline';
+import { runJobIntelligence } from '../job-intelligence/job-intelligence-pipeline';
 
 
 /**
@@ -68,7 +69,7 @@ import { compareResumes } from '../resume-comparison/comparison-pipeline';
  * overall pipeline contract.
  */
 export function runResumeIntelligence(
-  input: ResumeIntelligenceInput,
+  input: ResumeIntelligenceInput & { jobDescription?: string },
 ): ResumeIntelligenceOutput {
   /**
    * Step 1: Parse raw text into canonical structured resume.
@@ -123,11 +124,19 @@ export function runResumeIntelligence(
   /**
    * Step 6: Return the unified orchestration result.
    */
+    const jobIntelligence =
+    input.jobDescription && input.jobDescription.trim().length > 0
+      ? runJobIntelligence({
+          jobDescription: input.jobDescription,
+          resumeText: input.rawText,
+        })
+      : undefined;
   return {
     parser: parser.output,
     originalScoring,
     optimizer,
     optimizedScoring,
     comparison,
+    jobIntelligence,
   };
 }

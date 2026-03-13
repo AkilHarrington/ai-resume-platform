@@ -1,71 +1,41 @@
 # =========================================================
 # File: services/ats_service.py
 # Purpose:
-# ATS keyword extraction and resume/job-description matching logic.
-#
-# Responsibilities:
-# - normalize text for ATS-style keyword matching
-# - remove low-value stopwords from job descriptions and resume text
-# - flatten structured resume JSON into searchable text
-# - calculate ATS score based on matched vs missing keywords
-#
-# Key Notes:
-# - this remains deterministic matching logic for the MVP
-# - improvements added:
-#   1. unique keyword matching only
-#   2. weighted scoring
-#   3. basic synonym support
-#   4. phrase handling for high-value JD concepts
-#   5. keyword stuffing penalty
-#   6. automatic phrase learning from job descriptions
-# - frontend depends on the response shape from calculate_ats_score()
+# ATS keyword extraction, industry detection, structured resume parsing,
+# and multi-factor resume/job-description matching logic for
+# the AI Resume Platform.
 # =========================================================
 
 import re
 
+from services.resume_parser import parse_resume_text
 
-# =========================================================
-# ATS Stopword Library
-# =========================================================
 
 STOPWORDS = {
-    # Basic language
     "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
     "in", "is", "it", "of", "on", "or", "that", "the", "to", "with",
     "will", "this", "these", "those", "their", "there", "its",
-
-    # Grammar / helper verbs
     "has", "have", "had", "having",
     "do", "does", "did",
     "can", "could", "may", "might",
     "must", "should", "would",
-
-    # Job description filler
     "role", "position", "candidate", "candidates",
     "successful", "ideal", "looking", "seeking",
     "opportunity",
-
-    # Resume generic filler
     "ability", "abilities",
     "skill", "skills",
     "knowledge",
     "experience", "experiences",
     "background",
-
-    # Job description structure
     "responsibility", "responsibilities",
     "require", "requires", "required",
     "including", "include", "includes",
-
-    # Generic verbs used in many job postings
     "support", "supporting",
     "provide", "providing",
     "assist", "assisting",
     "help", "helping",
     "ensure", "ensuring",
     "maintain", "maintaining",
-
-    # Weak action verbs
     "build", "building",
     "drive", "driving",
     "deliver", "delivering",
@@ -73,30 +43,20 @@ STOPWORDS = {
     "optimize", "optimizing",
     "develop", "developing",
     "implement", "implementing",
-
-    # Corporate fluff
     "success", "successful",
     "result", "results",
     "growth", "growing",
-
-    # Adjective noise discovered during testing
     "strong",
     "excellent",
     "great",
     "good",
     "highly",
-
-    # Organizational noise
     "team", "teams",
     "company", "organization",
     "environment", "environmental",
     "across", "within",
-
-    # Resume filler verbs
     "work", "working",
     "based", "closely",
-
-    # Misc noise discovered in ATS tests
     "through",
     "conduct",
     "protecting",
@@ -108,31 +68,10 @@ STOPWORDS = {
     "coordinating",
     "initiative",
     "initiatives",
-}
-
-
-# =========================================================
-# Phrase / Synonym Configuration
-# =========================================================
-
-PHRASE_SYNONYMS = {
-    "workforce planning": [
-        "workforce planning",
-        "labor forecasting",
-        "staffing coordination",
-        "staffing planning",
-        "headcount planning",
-    ],
-    "project management": [
-        "project management",
-        "project coordination",
-        "program management",
-    ],
-    "customer service": [
-        "customer service",
-        "client service",
-        "customer support",
-    ],
+    "capabilities",
+    "multiple",
+    "times",
+    "tools",
 }
 
 SYNONYM_MAP = {
@@ -143,7 +82,6 @@ SYNONYM_MAP = {
         "spreadsheet analysis",
         "excel dashboards",
     ],
-
     "reporting": [
         "reporting",
         "reports",
@@ -151,8 +89,8 @@ SYNONYM_MAP = {
         "performance tracking",
         "metrics reviews",
         "service metrics",
+        "operational reporting",
     ],
-
     "workforce": [
         "workforce",
         "staffing",
@@ -160,7 +98,6 @@ SYNONYM_MAP = {
         "headcount",
         "coverage",
     ],
-
     "planning": [
         "planning",
         "forecasting",
@@ -168,7 +105,6 @@ SYNONYM_MAP = {
         "scheduling",
         "schedules",
     ],
-
     "communication": [
         "communication",
         "verbal communication",
@@ -176,32 +112,26 @@ SYNONYM_MAP = {
         "cross-team collaboration",
         "collaboration",
     ],
-
     "analyst": [
-    "analyst",
-    "analysis",
-    "analyzing",
-    "analytical",
-    "data analysis",],
-
+        "analyst",
+        "analysis",
+        "analyzing",
+        "analytical",
+    ],
     "operations": [
         "operations",
         "operational",
-        "support",
         "workflow",
     ],
-
     "management": [
         "management",
         "tracking",
         "oversight",
     ],
-
     "coordination": [
         "coordination",
         "scheduling",
     ],
-
     "api": [
         "api",
         "apis",
@@ -210,7 +140,6 @@ SYNONYM_MAP = {
         "api development",
         "rest api development",
     ],
-
     "accounting": [
         "accounting",
         "reconciliation",
@@ -218,60 +147,88 @@ SYNONYM_MAP = {
         "ledger",
         "general ledger",
     ],
-
     "forecasting": [
         "forecasting",
         "projections",
         "budget planning",
     ],
-
     "compliance": [
         "compliance",
         "controls",
         "policy adherence",
         "regulatory",
     ],
-
     "modeling": [
         "modeling",
         "financial modeling",
         "scenario modeling",
     ],
-
     "variance": [
         "variance",
         "variance analysis",
         "budget variance",
     ],
+    "dashboards": [
+        "dashboards",
+        "dashboard",
+        "visualizations",
+        "data visualization",
+    ],
 }
 
-KEYWORD_WEIGHTS = {
-    "excel": 2.0,
-    "reporting": 2.0,
-    "workforce": 2.0,
-    "planning": 2.0,
-    "workforce planning": 3.0,
-    "analyst": 2.0,
-    "operations": 1.5,
-    "communication": 1.5,
-    "project management": 2.5,
-    "customer service": 1.5,
-    "excellent": 0.5,
+INDUSTRY_KEYWORDS = {
+    "healthcare": {
+        "clinical", "hospital", "patient", "patients", "healthcare",
+        "medical", "care", "nursing", "outpatient", "emergency",
+        "compliance", "clinical operations",
+    },
+    "sports": {
+        "athlete", "athletes", "sports", "coaching", "coach",
+        "training", "performance", "workload", "recovery",
+        "match", "league", "conditioning", "sports science",
+    },
+    "construction": {
+        "construction", "contractor", "contractors", "infrastructure",
+        "project site", "site", "scheduling", "budgeting",
+        "regulatory compliance", "risk management",
+    },
+    "finance": {
+        "accounting", "forecasting", "variance", "budget",
+        "financial", "compliance", "ledger", "reconciliation",
+        "modeling", "analysis",
+    },
+    "technology": {
+        "software", "api", "apis", "engineering", "developer",
+        "developers", "frontend", "backend", "cloud", "database",
+        "platform", "systems",
+    },
 }
 
+LEADERSHIP_TERMS = {
+    "lead", "led", "leading", "leadership",
+    "manage", "managed", "managing", "manager", "management",
+    "oversee", "oversaw", "oversight",
+    "direct", "directed", "director",
+    "head", "headed", "own", "owned", "owner",
+    "supervise", "supervised", "supervising",
+    "execute", "executed",
+    "strategy", "strategic",
+}
 
-# =========================================================
-# Keyword Normalization Helpers
-# =========================================================
+ACTION_TERMS = {
+    "improved", "implemented", "built", "developed", "managed",
+    "analyzed", "created", "optimized", "coordinated", "directed",
+    "led", "presented", "designed", "reduced", "increased",
+    "established", "launched", "delivered", "executed", "monitored",
+    "manage", "implement", "develop", "coordinate", "present",
+    "analyze", "support", "improve", "oversee",
+}
+
 
 def normalize_word(word: str) -> str:
-    """
-    Normalize words for ATS matching without making displayed keywords ugly.
-    """
     word = word.lower().strip()
     word = word.replace("’", "").replace("'", "")
 
-    # Unify common analyst / analysis family terms
     if word in {"analysis", "analyzing", "analytical"}:
         return "analyst"
 
@@ -306,51 +263,22 @@ def normalize_word(word: str) -> str:
     return word
 
 
-def normalize_phrase(phrase: str) -> str:
-    """
-    Normalize multi-word phrases using normalize_word() per token.
-    """
-    words = re.findall(r"\b[a-zA-Z][a-zA-Z\-&/]*\b", phrase.lower())
-    normalized_words = [normalize_word(word) for word in words if len(word) > 1]
-    return " ".join(normalized_words).strip()
+def apply_synonym_map(keywords: set[str]) -> set[str]:
+    expanded = set(keywords)
+
+    for canonical, variants in SYNONYM_MAP.items():
+        normalized_variants = {normalize_word(v) for v in variants}
+        if expanded.intersection(normalized_variants):
+            expanded.add(canonical)
+
+    return expanded
 
 
-def text_contains_variant(text: str, variant: str) -> bool:
-    """
-    Check whether a normalized text blob contains a whole-word variant.
-    """
-    escaped = re.escape(variant)
-    pattern = rf"\b{escaped}\b"
-    return re.search(pattern, text) is not None
-
-
-def count_variant_occurrences(text: str, variant: str) -> int:
-    """
-    Count whole-word occurrences of a variant inside normalized text.
-    """
-    escaped = re.escape(variant)
-    pattern = rf"\b{escaped}\b"
-    return len(re.findall(pattern, text))
-
-
-# =========================================================
-# Keyword Extraction Logic
-# =========================================================
-
-def extract_keywords(text: str) -> tuple[set[str], dict[str, str], str]:
-    """
-    Extract meaningful keywords from text while removing stopwords and
-    normalizing variants.
-
-    Returns:
-    - normalized keyword set for matching
-    - display map for cleaner UI output
-    - normalized text blob for phrase/synonym matching
-    """
+def extract_keywords(text: str) -> tuple[set[str], dict[str, str]]:
     words = re.findall(r"\b[a-zA-Z][a-zA-Z\-&/]*\b", text.lower())
 
-    normalized_keywords = set()
-    display_map = {}
+    normalized_keywords: set[str] = set()
+    display_map: dict[str, str] = {}
 
     for raw_word in words:
         if len(raw_word) <= 2:
@@ -376,305 +304,292 @@ def extract_keywords(text: str) -> tuple[set[str], dict[str, str], str]:
             if len(raw_word) < len(current):
                 display_map[normalized] = raw_word
 
-    normalized_full_text = normalize_phrase(text)
+    normalized_keywords = apply_synonym_map(normalized_keywords)
 
-    return normalized_keywords, display_map, normalized_full_text
+    for canonical, variants in SYNONYM_MAP.items():
+        if canonical not in display_map:
+            for variant in variants:
+                variant_norm = normalize_word(variant)
+                if variant_norm in normalized_keywords:
+                    display_map[canonical] = variant
+                    break
 
-
-def extract_job_phrases(job_description: str) -> list[str]:
-    """
-    Extract meaningful 2-word phrases from the job description.
-
-    Rules:
-    - only keep phrases where both words are useful keywords
-    - skip weak/generic lead words
-    - skip weak/generic trailing words
-    - only keep phrases likely to represent real concepts
-    """
-    words = re.findall(r"\b[a-zA-Z][a-zA-Z\-&/]*\b", job_description.lower())
-    normalized_words = [normalize_word(word) for word in words if len(word) > 2]
-
-    weak_words = STOPWORDS.union({
-        "strong",
-        "experience",
-        "knowledge",
-        "skill",
-        "skills",
-        "seeking",
-        "seek",
-        "require",
-        "required",
-        "including",
-        "support",
-        "working",
-        "closely",
-    })
-
-    allowed_heads = {
-        "financial",
-        "variance",
-        "social",
-        "marketing",
-        "supply",
-        "demand",
-        "project",
-        "customer",
-        "cloud",
-        "backend",
-        "software",
-        "patient",
-        "infection",
-        "clinical",
-        "workforce",
-        "digital",
-        "content",
-        "vendor",
-        "warehouse",
-        "shipment",
-        "site",
-        "budget",
-        "accounting",
-    }
-
-    allowed_tails = {
-        "analysis",
-        "analytics",
-        "planning",
-        "management",
-        "coordination",
-        "compliance",
-        "modeling",
-        "reporting",
-        "strategy",
-        "operations",
-        "development",
-        "deployment",
-        "architecture",
-        "control",
-        "care",
-        "documentation",
-        "monitoring",
-        "delivery",
-        "records",
-        "forecasting",
-    }
-
-    phrases = set()
-
-    for i in range(len(normalized_words) - 1):
-        first = normalized_words[i]
-        second = normalized_words[i + 1]
-
-        if first in weak_words or second in weak_words:
-            continue
-
-        if len(first) <= 2 or len(second) <= 2:
-            continue
-
-        # Only keep phrases that look like real ATS concepts
-        if first in allowed_heads or second in allowed_tails:
-            phrase = f"{first} {second}".strip()
-            phrases.add(phrase)
-
-    return sorted(phrases)
+    return normalized_keywords, display_map
 
 
-# =========================================================
-# Resume Flattening Logic
-# =========================================================
+def detect_industry(text: str) -> str:
+    lowered = text.lower()
+    scores: dict[str, int] = {}
 
-def resume_to_text(resume_data: dict) -> str:
-    """
-    Flatten structured resume JSON into a single text blob for ATS analysis.
-    """
-    parts = []
+    for industry, keywords in INDUSTRY_KEYWORDS.items():
+        scores[industry] = sum(1 for keyword in keywords if keyword in lowered)
 
-    parts.append(resume_data.get("full_name", ""))
-    parts.append(resume_data.get("location", ""))
-    parts.append(resume_data.get("phone", ""))
-    parts.append(resume_data.get("email", ""))
-    parts.append(resume_data.get("professional_summary", ""))
+    best_industry = "general"
+    best_score = 0
 
-    for skill in resume_data.get("skills", []):
-        parts.append(skill)
+    for industry, score in scores.items():
+        if score > best_score:
+            best_industry = industry
+            best_score = score
 
-    for role in resume_data.get("professional_experience", []):
-        parts.append(role.get("company", ""))
-        parts.append(role.get("title", ""))
-        for bullet in role.get("description", []):
-            parts.append(bullet)
-
-    for edu in resume_data.get("education", []):
-        parts.append(edu)
-
-    for cert in resume_data.get("certifications", []):
-        parts.append(cert)
-
-    return " ".join(parts)
+    return best_industry if best_score >= 2 else "general"
 
 
-# =========================================================
-# Matching Helpers
-# =========================================================
+def parsed_resume_to_ats_schema(parsed_resume: dict) -> dict:
+    experience_entries = []
 
-def build_canonical_keyword_data(job_keywords: set[str], job_display: dict[str, str], job_text: str) -> list[dict]:
-    """
-    Build the canonical keyword list from the job description.
-
-    We score:
-    1. predefined phrase concepts
-    2. single-token keywords
-    """
-    canonical_items: list[dict] = []
-    seen_canonicals = set()
-
-    # 1. Add predefined phrase concepts found in the JD.
-    for canonical_phrase, variants in PHRASE_SYNONYMS.items():
-        normalized_variants = [normalize_phrase(variant) for variant in variants]
-        if any(text_contains_variant(job_text, variant) for variant in normalized_variants):
-            canonical_items.append(
-                {
-                    "canonical": canonical_phrase,
-                    "display": canonical_phrase,
-                    "weight": KEYWORD_WEIGHTS.get(canonical_phrase, 1.0),
-                    "variants": normalized_variants,
-                }
-            )
-            seen_canonicals.add(canonical_phrase)
-
-    # 2. Add single-token keywords found in the JD.
-    for keyword in sorted(job_keywords):
-        if keyword in seen_canonicals:
-            continue
-
-        display = job_display.get(keyword, keyword)
-
-        if keyword in SYNONYM_MAP:
-            variants = [normalize_phrase(variant) for variant in SYNONYM_MAP[keyword]]
-        else:
-            variants = [keyword]
-
-        canonical_items.append(
+    for item in parsed_resume.get("experience", []) or []:
+        experience_entries.append(
             {
-                "canonical": keyword,
-                "display": display,
-                "weight": KEYWORD_WEIGHTS.get(keyword, 1.0),
-                "variants": variants,
+                "company": item.get("company", ""),
+                "title": item.get("title", ""),
+                "description": item.get("bullets", []) or [],
             }
         )
 
-    return canonical_items
-
-
-def keyword_matches_resume(item: dict, resume_keywords: set[str], resume_text: str) -> bool:
-    """
-    Determine whether a canonical JD keyword or phrase matches the resume.
-    """
-    for variant in item["variants"]:
-        if " " in variant:
-            if text_contains_variant(resume_text, variant):
-                return True
+    education_entries = []
+    for item in parsed_resume.get("education", []) or []:
+        if isinstance(item, dict):
+            parts = [
+                item.get("institution", ""),
+                item.get("degree", ""),
+                item.get("fieldOfStudy", ""),
+            ]
+            education_entries.append(" — ".join(part for part in parts if part))
         else:
-            if variant in resume_keywords:
-                return True
+            education_entries.append(str(item))
 
-    return False
+    certification_entries = []
+    for item in parsed_resume.get("certifications", []) or []:
+        if isinstance(item, dict):
+            if item.get("name"):
+                certification_entries.append(item.get("name", ""))
+        else:
+            certification_entries.append(str(item))
 
-
-def calculate_stuffing_penalty(canonical_items: list[dict], resume_text: str) -> int:
-    """
-    Apply a small deterministic penalty when matched concepts appear
-    unnaturally often in the resume text.
-    """
-    penalty = 0
-
-    for item in canonical_items:
-        weight = item["weight"]
-
-        if weight < 1.0:
-            continue
-
-        max_occurrences = 0
-
-        for variant in item["variants"]:
-            occurrences = count_variant_occurrences(resume_text, variant)
-            if occurrences > max_occurrences:
-                max_occurrences = occurrences
-
-        if max_occurrences >= 4:
-            penalty += 3
-        elif max_occurrences == 3:
-            penalty += 1
-
-    return min(penalty, 15)
-
-
-# =========================================================
-# ATS Scoring Logic
-# =========================================================
-
-def calculate_ats_score(resume_data: dict, job_description: str) -> dict:
-    """
-    Compare resume vs job description using normalized keywords while returning
-    cleaner display keywords for the UI.
-
-    Response shape:
-    {
-        "ats_score": int,
-        "matched_keywords": list[str],
-        "missing_keywords": list[str]
+    return {
+        "full_name": parsed_resume.get("fullName", ""),
+        "email": parsed_resume.get("contact", {}).get("email", "") or "",
+        "phone": parsed_resume.get("contact", {}).get("phone", "") or "",
+        "location": parsed_resume.get("contact", {}).get("location", "") or "",
+        "professional_summary": parsed_resume.get("summary", "") or "",
+        "skills": parsed_resume.get("skills", []) or [],
+        "professional_experience": experience_entries,
+        "education": education_entries,
+        "certifications": certification_entries,
     }
-    """
-    resume_text_raw = resume_to_text(resume_data)
 
-    resume_keywords, _resume_display, resume_text = extract_keywords(resume_text_raw)
-    job_keywords, job_display, job_text = extract_keywords(job_description)
 
-    canonical_items = build_canonical_keyword_data(job_keywords, job_display, job_text)
+def normalize_resume_input(resume_input) -> dict:
+    if isinstance(resume_input, str):
+        parsed_resume = parse_resume_text(resume_input)
+        return parsed_resume_to_ats_schema(parsed_resume)
 
-    if len(canonical_items) == 0:
-        return {
-            "ats_score": 0,
-            "matched_keywords": [],
-            "missing_keywords": [],
-        }
+    if isinstance(resume_input, dict):
+        if "professional_summary" in resume_input or "professional_experience" in resume_input:
+            return resume_input
 
-    matched: list[str] = []
-    missing: list[str] = []
-    matched_weight = 0.0
-    total_weight = 0.0
+        if "fullName" in resume_input or "experience" in resume_input:
+            return parsed_resume_to_ats_schema(resume_input)
 
-    seen_displays = set()
-    scored_items: list[dict] = []
+    return {
+        "full_name": "",
+        "email": "",
+        "phone": "",
+        "location": "",
+        "professional_summary": "",
+        "skills": [],
+        "professional_experience": [],
+        "education": [],
+        "certifications": [],
+    }
 
-    for item in canonical_items:
-        display = item["display"]
-        weight = item["weight"]
 
-        display_key = display.lower()
-        if display_key in seen_displays:
-            continue
+def resume_to_text(resume_data: dict) -> str:
+    parts = []
 
-        seen_displays.add(display_key)
-        total_weight += weight
-        scored_items.append(item)
+    parts.append(str(resume_data.get("full_name", "")))
+    parts.append(str(resume_data.get("location", "")))
+    parts.append(str(resume_data.get("phone", "")))
+    parts.append(str(resume_data.get("email", "")))
+    parts.append(str(resume_data.get("professional_summary", "")))
 
-        if keyword_matches_resume(item, resume_keywords, resume_text):
-            matched.append(display)
-            matched_weight += weight
-        else:
-            missing.append(display)
+    for skill in resume_data.get("skills", []):
+        parts.append(str(skill))
 
-    if total_weight == 0:
-        base_score = 0
+    for role in resume_data.get("professional_experience", []):
+        parts.append(str(role.get("company", "")))
+        parts.append(str(role.get("title", "")))
+        for bullet in role.get("description", []):
+            parts.append(str(bullet))
+
+    for edu in resume_data.get("education", []):
+        parts.append(str(edu))
+
+    for cert in resume_data.get("certifications", []):
+        parts.append(str(cert))
+
+    return " ".join(part for part in parts if part).strip()
+
+
+def score_keyword_alignment(
+    resume_keywords: set[str],
+    job_keywords: set[str],
+) -> tuple[int, list[str], list[str]]:
+    matched_normalized = sorted(resume_keywords.intersection(job_keywords))
+    missing_normalized = sorted(set(job_keywords - resume_keywords))
+
+    if len(job_keywords) == 0:
+        raw_score = 0
     else:
-        base_score = int((matched_weight / total_weight) * 100)
+        raw_score = int((len(matched_normalized) / len(job_keywords)) * 100)
 
-    stuffing_penalty = calculate_stuffing_penalty(scored_items, resume_text)
-    final_score = max(0, base_score - stuffing_penalty)
+    weighted_score = round(raw_score * 0.40)
+    return weighted_score, matched_normalized, missing_normalized
+
+
+def score_experience_strength(resume_data: dict) -> int:
+    roles = resume_data.get("professional_experience", [])
+    if not roles:
+        return 0
+
+    bullet_count = 0
+    action_bullet_count = 0
+
+    for role in roles:
+        for bullet in role.get("description", []):
+            text = str(bullet).strip()
+            if not text:
+                continue
+
+            bullet_count += 1
+            lowered = text.lower()
+
+            if any(term in lowered for term in ACTION_TERMS):
+                action_bullet_count += 1
+
+    if bullet_count == 0:
+        raw_score = 0
+    else:
+        raw_score = min(100, int((action_bullet_count / bullet_count) * 100) + 40)
+
+    return round(raw_score * 0.25)
+
+
+def score_leadership_strength(resume_data: dict) -> int:
+    text = resume_to_text(resume_data).lower()
+    leadership_hits = sum(1 for term in LEADERSHIP_TERMS if term in text)
+
+    raw_score = min(100, leadership_hits * 12)
+    return round(raw_score * 0.10)
+
+
+def score_section_completeness(resume_data: dict) -> int:
+    checks = [
+        bool(str(resume_data.get("full_name", "")).strip()),
+        bool(str(resume_data.get("professional_summary", "")).strip()),
+        bool(resume_data.get("skills", [])),
+        bool(resume_data.get("professional_experience", [])),
+        bool(resume_data.get("education", [])),
+    ]
+
+    completed = sum(1 for item in checks if item)
+    raw_score = int((completed / len(checks)) * 100)
+
+    return round(raw_score * 0.15)
+
+
+def score_industry_alignment(resume_text: str, job_description: str) -> tuple[int, str, str]:
+    resume_industry = detect_industry(resume_text)
+    job_industry = detect_industry(job_description)
+
+    if resume_industry == "general" and job_industry == "general":
+        raw_score = 95
+    elif resume_industry == "general" or job_industry == "general":
+        raw_score = 80
+    elif resume_industry == job_industry:
+        raw_score = 100
+    else:
+        raw_score = 0
+
+    return round(raw_score * 0.10), resume_industry, job_industry
+
+
+def calculate_ats_score(resume_input, job_description: str) -> dict:
+    resume_data = normalize_resume_input(resume_input)
+    resume_text = resume_to_text(resume_data)
+
+    resume_keywords, _resume_display = extract_keywords(resume_text)
+    job_keywords, job_display = extract_keywords(job_description)
+
+    keyword_score, matched_normalized, missing_normalized = score_keyword_alignment(
+        resume_keywords,
+        job_keywords,
+    )
+    experience_score = score_experience_strength(resume_data)
+    leadership_score = score_leadership_strength(resume_data)
+    completeness_score = score_section_completeness(resume_data)
+    industry_score, resume_industry, job_industry = score_industry_alignment(
+        resume_text,
+        job_description,
+    )
+
+    matched = [job_display.get(word, word) for word in matched_normalized]
+    missing = sorted(set(job_display.get(word, word) for word in missing_normalized))
+
+    final_score = min(
+        100,
+        keyword_score
+        + experience_score
+        + leadership_score
+        + completeness_score
+        + industry_score,
+    )
 
     return {
         "ats_score": final_score,
-        "matched_keywords": sorted(matched),
-        "missing_keywords": sorted(missing),
+        "matched_keywords": matched,
+        "missing_keywords": missing,
+        "resume_industry": resume_industry,
+        "job_industry": job_industry,
+        "parsed_resume": resume_data,
+        "category_scores": [
+            {
+                "name": "Keyword Alignment",
+                "score": keyword_score,
+                "feedback": [
+                    f"Matched keywords: {len(matched)}",
+                    f"Missing keywords: {len(missing)}",
+                ],
+            },
+            {
+                "name": "Experience Strength",
+                "score": experience_score,
+                "feedback": [
+                    "Measures action-oriented experience content.",
+                ],
+            },
+            {
+                "name": "Leadership Strength",
+                "score": leadership_score,
+                "feedback": [
+                    "Measures leadership and ownership language.",
+                ],
+            },
+            {
+                "name": "Section Completeness",
+                "score": completeness_score,
+                "feedback": [
+                    "Measures presence of core resume sections.",
+                ],
+            },
+            {
+                "name": "Industry Alignment",
+                "score": industry_score,
+                "feedback": [
+                    f"Resume industry: {resume_industry}",
+                    f"Job industry: {job_industry}",
+                ],
+            },
+        ],
     }

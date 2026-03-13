@@ -167,28 +167,21 @@ def resume_scan(data: ResumeScanRequest):
     Scan raw resume text and return ATS analysis for the React frontend.
     """
     job_description = data.jobDescription or ""
-    resume_data = build_resume_data_from_text(data.resumeText)
 
-    ats = calculate_ats_score(resume_data, job_description)
+    ats = calculate_ats_score(data.resumeText, job_description)
     matched = ats.get("matched_keywords", [])
     missing = ats.get("missing_keywords", [])
+    category_scores = ats.get("category_scores", [])
+    parsed_resume = ats.get("parsed_resume", {})
 
     return {
         "overallScore": ats.get("ats_score", 0),
         "summary": "Resume scan completed successfully.",
         "previewText": data.resumeText,
+        "parsedResume": parsed_resume,
         "matchedKeywords": matched,
         "missingKeywords": missing,
-        "categoryScores": [
-            {
-                "name": "ATS Match",
-                "score": ats.get("ats_score", 0),
-                "feedback": [
-                    f"Matched keywords: {len(matched)}",
-                    f"Missing keywords: {len(missing)}",
-                ],
-            }
-        ],
+        "categoryScores": category_scores,
         "issues": [
             {
                 "id": f"missing-keyword-{index}",
@@ -204,55 +197,101 @@ def resume_scan(data: ResumeScanRequest):
         ],
     }
 
+def build_optimization_guidance(resume_text: str) -> dict:
+    lowered = resume_text.lower()
+
+    reasons = []
+    bullet_lines = [
+        line.strip()
+        for line in resume_text.splitlines()
+        if line.strip().startswith("•") or line.strip().startswith("-")
+    ]
+
+    leadership_terms = {
+        "led", "lead", "managed", "manage", "oversaw", "oversee",
+        "directed", "supervised", "owned", "headed",
+    }
+
+    metric_signals = {
+        "%", "$", "increase", "decrease", "reduced", "improved",
+        "grew", "saved", "raised", "cut", "boosted",
+    }
+
+    operations_terms = {
+        "operations", "operational", "workflow", "process", "planning",
+        "coordination", "reporting", "oversight",
+    }
+
+    has_leadership = any(term in lowered for term in leadership_terms)
+    has_metrics = any(signal in lowered for signal in metric_signals)
+    has_operations = any(term in lowered for term in operations_terms)
+
+    if len(bullet_lines) < 4 or not has_metrics:
+        reasons.append("The experience section lacks measurable accomplishments.")
+
+    if not has_leadership:
+        reasons.append("Leadership responsibilities are not clearly described.")
+
+    if not has_operations:
+        reasons.append("Operational responsibilities are not evident.")
+
+    if not reasons:
+        reasons.append("The current resume already appears close to its realistic optimization ceiling.")
+
+    return {
+        "title": "Optimization could not significantly improve this resume because:",
+        "reasons": reasons,
+        "suggestionsTitle": "Consider expanding your experience bullets with:",
+        "suggestions": [
+            "Actions you led",
+            "Results you achieved",
+            "Teams or processes you managed",
+        ],
+    }
 
 @app.post("/api/resume/optimize")
 def resume_optimize(data: ResumeOptimizeRequest):
-    """
-    Optimize raw resume text against the target job description for the React frontend.
-    """
     job_description = data.jobDescription or ""
 
-    original_resume_data = {
-        "full_name": "",
-        "email": "",
-        "phone": "",
-        "location": "",
-        "professional_summary": data.resumeText,
-        "skills": [],
-        "professional_experience": [],
-        "education": [],
-        "certifications": [],
-    }
+    original_ats = calculate_ats_score(data.resumeText, job_description)
 
-    original_ats = calculate_ats_score(original_resume_data, job_description)
-
-    # Call a text-based optimizer instead of forcing structured JSON behavior
     optimized_resume_text = optimize_resume_text(
         data.resumeText,
         job_description,
         original_ats.get("missing_keywords", []),
+        original_score=original_ats.get("ats_score", 0),
     )
 
-    if not optimized_resume_text or not optimized_resume_text.strip():
+    improved_ats = calculate_ats_score(optimized_resume_text, job_description)
+
+    original_score = original_ats.get("ats_score", 0)
+    improved_score = improved_ats.get("ats_score", 0)
+
+    if original_score < 60:
+        max_allowed_improvement = 15
+    elif original_score < 75:
+        max_allowed_improvement = 12
+    else:
+        max_allowed_improvement = 10
+
+    reverted_to_original = False
+
+    if improved_score - original_score > max_allowed_improvement:
         optimized_resume_text = data.resumeText
-
-    improved_resume_data = {
-        "full_name": "",
-        "email": "",
-        "phone": "",
-        "location": "",
-        "professional_summary": optimized_resume_text,
-        "skills": [],
-        "professional_experience": [],
-        "education": [],
-        "certifications": [],
-    }
-
-    improved_ats = calculate_ats_score(improved_resume_data, job_description)
+        improved_ats = original_ats
+        reverted_to_original = True
 
     if improved_ats.get("ats_score", 0) < original_ats.get("ats_score", 0):
         optimized_resume_text = data.resumeText
         improved_ats = original_ats
+        reverted_to_original = True
+
+    final_score = improved_ats.get("ats_score", 0)
+    original_score = original_ats.get("ats_score", 0)
+
+    optimization_guidance = None
+    if reverted_to_original or final_score == original_score:
+        optimization_guidance = build_optimization_guidance(data.resumeText)
 
     return {
         "originalScore": original_ats.get("ats_score", 0),
@@ -260,6 +299,9 @@ def resume_optimize(data: ResumeOptimizeRequest):
         "scoreImprovement": improved_ats.get("ats_score", 0) - original_ats.get("ats_score", 0),
         "originalResumeText": data.resumeText,
         "optimizedResumeText": optimized_resume_text,
+        "originalParsedResume": original_ats.get("parsed_resume", {}),
+        "optimizedParsedResume": improved_ats.get("parsed_resume", {}),
         "missingKeywordsBefore": original_ats.get("missing_keywords", []),
         "missingKeywordsAfter": improved_ats.get("missing_keywords", []),
+        "optimizationGuidance": optimization_guidance,
     }

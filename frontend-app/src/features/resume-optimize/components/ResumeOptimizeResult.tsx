@@ -1,8 +1,10 @@
 import { ResumePreviewCard } from '../../../components/ResumePreviewCard'
+import type { ResumeTemplate } from '../../../types/resumeTemplate'
 import type { ResumeOptimizeResponse } from '../types/resumeOptimize.types'
 
 interface ResumeOptimizeResultProps {
   result: ResumeOptimizeResponse
+  template?: ResumeTemplate
 }
 
 function getImprovementColor(scoreImprovement: number) {
@@ -35,7 +37,10 @@ function getImprovementColor(scoreImprovement: number) {
   }
 }
 
-export function ResumeOptimizeResult({ result }: ResumeOptimizeResultProps) {
+export function ResumeOptimizeResult({
+  result,
+  template = 'professional',
+}: ResumeOptimizeResultProps) {
   const improvementMeta = getImprovementColor(result.scoreImprovement)
   const removedKeywords = result.missingKeywordsBefore.filter(
     (keyword) => !result.missingKeywordsAfter.includes(keyword),
@@ -88,6 +93,44 @@ export function ResumeOptimizeResult({ result }: ResumeOptimizeResultProps) {
           <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>{improvementMeta.tone}</div>
         </div>
       </div>
+
+      {result.optimizationGuidance && (
+        <div
+          style={{
+            padding: '20px',
+            borderRadius: '16px',
+            border: '1px solid #fde68a',
+            background: '#fffbeb',
+            color: '#92400e',
+          }}
+        >
+          <h3 style={{ marginBottom: '12px', color: '#92400e' }}>Optimization Guidance</h3>
+
+          <p style={{ marginTop: 0, marginBottom: '12px', fontWeight: 600 }}>
+            {result.optimizationGuidance.title}
+          </p>
+
+          <ul style={{ marginTop: 0, marginBottom: '16px', paddingLeft: '20px' }}>
+            {result.optimizationGuidance.reasons.map((reason, index) => (
+              <li key={`reason-${index}`} style={{ marginBottom: '8px' }}>
+                {reason}
+              </li>
+            ))}
+          </ul>
+
+          <p style={{ marginTop: 0, marginBottom: '12px', fontWeight: 600 }}>
+            {result.optimizationGuidance.suggestionsTitle}
+          </p>
+
+          <ul style={{ margin: 0, paddingLeft: '20px' }}>
+            {result.optimizationGuidance.suggestions.map((suggestion, index) => (
+              <li key={`suggestion-${index}`} style={{ marginBottom: '8px' }}>
+                {suggestion}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div
         style={{
@@ -210,16 +253,20 @@ export function ResumeOptimizeResult({ result }: ResumeOptimizeResultProps) {
           title="Before Optimization"
           subtitle="Original resume version"
           content={result.originalResumeText}
+          structuredResume={result.originalParsedResume}
+          template={template}
         />
 
         <ResumePreviewCard
           title="After Optimization"
           subtitle="Improved resume version"
           content={result.optimizedResumeText}
+          structuredResume={result.optimizedParsedResume}
           accent="success"
           highlightKeywords={removedKeywords}
           highlightLabel="Resolved Keywords"
           highlightStyle="resolved"
+          template={template}
         />
       </div>
     </section>

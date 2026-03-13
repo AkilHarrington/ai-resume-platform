@@ -1,12 +1,12 @@
-import { http } from '../../../api/http'
-import type {
-  ResumeScanRequest,
-  ResumeScanResponse,
-} from '../types/resumeScan.types'
+import { API_BASE_URL } from '../../../api/config'
+import { apiPost } from '../../../api/http'
+import type { ResumeScanRequest, ResumeScanResponse } from '../types/resumeScan.types'
 
-export function scanResume(payload: ResumeScanRequest) {
-  return http<ResumeScanResponse>('/api/resume/scan', {
-    method: 'POST',
-    body: payload,
-  })
+export async function scanResume(
+  payload: ResumeScanRequest,
+): Promise<ResumeScanResponse> {
+  return apiPost<ResumeScanResponse, ResumeScanRequest>(
+    `${API_BASE_URL}/api/resume/scan`,
+    payload,
+  )
 }

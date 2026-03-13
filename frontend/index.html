@@ -88,11 +88,22 @@ Notes:
       </div>
 
       <form id="resumeForm">
+        <label for="resumeUpload">Upload Resume File</label>
+        <input type="file" id="resumeUpload" accept=".pdf,.docx,.txt">
+        <p class="input-help-text">
+          Supported formats: PDF, DOCX, TXT
+        </p>
+        <p id="uploadFileName" class="upload-file-name"></p>
+
+        <div class="or-divider">
+          <span>OR fill in the details below</span>
+        </div>
+
         <label for="name">Full Name</label>
-        <input id="name" required>
+        <input id="name">
 
         <label for="email">Email</label>
-        <input id="email" required>
+        <input id="email">
 
         <label for="phone">Phone</label>
         <input id="phone">

@@ -47,6 +47,10 @@ import type {
   ResumeComparisonReport,
 } from '../resume-comparison/comparison-types';
 
+import type {
+  JobIntelligenceResult,
+} from '../job-intelligence/job-intelligence-types';
+
 
 /**
  * ---------------------------------------------------------
@@ -93,6 +97,8 @@ export interface ResumeIntelligenceOutput {
   optimizedScoring: ResumeScoringOutput;
 
   comparison: ResumeComparisonReport;
+
+  jobIntelligence?: JobIntelligenceResult;
 }
 
 

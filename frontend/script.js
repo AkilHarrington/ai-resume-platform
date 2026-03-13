@@ -1,8 +1,10 @@
+console.log("SCRIPT V2 LOADED - 2026-03-11");
+
 /*
 =========================================================
 File: script.js
 Purpose:
-Main frontend controller for the AI Resume Platform.
+Frontend controller for the AI Resume Platform v2.
 
 Responsibilities:
 - Manage frontend state
@@ -12,16 +14,19 @@ Responsibilities:
 - Render resume preview
 - Render ATS analysis
 - Render advanced analysis panels
-- Render cover letter preview
-- Trigger downloads
-- Trigger Stripe checkout flow
+- Render comparison panels
+- Safely stub unsupported MVP actions
 
-Key Notes:
-- This is currently the most important frontend logic file
-- The code is structured for MVP delivery, not final modular architecture
-- Many render functions depend on backend response structure
-- Free vs Pro access is currently enforced on the frontend for MVP speed
-- Future refactor should split this file into smaller modules after deployment stability
+Notes:
+- This version is aligned to the current TypeScript backend
+- Supported backend endpoints:
+  - POST /api/resume/scan
+  - POST /api/resume/optimize
+- Unsupported features remain intentionally stubbed:
+  - PDF download
+  - DOCX download
+  - Cover letter generation
+  - Checkout
 =========================================================
 */
 
@@ -30,6 +35,7 @@ Key Notes:
 // =========================================================
 
 const form = document.getElementById("resumeForm");
+const resumeUpload = document.getElementById("resumeUpload")
 const statusText = document.getElementById("status");
 const generateBtn = document.getElementById("generateBtn");
 const actions = document.getElementById("actions");
@@ -110,264 +116,16 @@ const TEMPLATE_NOTES = {
 };
 
 // =========================================================
-// BACKEND INTEGRATION HELPERS
-// =========================================================
-
-/*
-Purpose:
-Bridge the legacy MVP frontend structure to the new
-TypeScript backend API.
-
-Why this exists:
-- Current HTML form is structured by fields
-- New backend currently expects rawText
-- Current renderers expect older frontend-friendly shapes
-
-So this layer:
-1. composes rawText from the form
-2. calls the new backend
-3. adapts backend responses into shapes the current UI can render
-*/
-
-function composeRawResumeText(formData) {
-  const sections = [];
-
-  const basics = [
-    formData.name,
-    formData.email,
-    formData.phone,
-    formData.location
-  ].filter(Boolean);
-
-  if (basics.length) {
-    sections.push(basics.join(" | "));
-  }
-
-  if (formData.skills) {
-    sections.push("SKILLS");
-    sections.push(formData.skills);
-  }
-
-  if (formData.experience) {
-    sections.push("EXPERIENCE");
-    sections.push(formData.experience);
-  }
-
-  if (formData.education) {
-    sections.push("EDUCATION");
-    sections.push(formData.education);
-  }
-
-  if (formData.certifications) {
-    sections.push("CERTIFICATIONS");
-    sections.push(formData.certifications);
-  }
-
-  return sections.join("\n\n").trim();
-}
-
-async function postResumeApi(path, payload) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data?.error || `Request failed with status ${response.status}`);
-  }
-
-  return data;
-}
-
-async function scanResumeRequest(rawText) {
-  return postResumeApi("/scan", { rawText });
-}
-
-async function optimizeResumeRequest(rawText) {
-  return postResumeApi("/optimize", { rawText });
-}
-
-function adaptContentJsonToPreviewResume(contentJson) {
-  return {
-    full_name: contentJson?.basics?.fullName || "",
-    email: contentJson?.basics?.email || "",
-    phone: contentJson?.basics?.phone || "",
-    location: contentJson?.basics?.location || "",
-    professional_summary: contentJson?.summary || "",
-
-    skills: [
-      ...(contentJson?.skills?.core || []),
-      ...(contentJson?.skills?.technical || []),
-      ...(contentJson?.skills?.tools || []),
-      ...(contentJson?.skills?.soft || [])
-    ],
-
-    professional_experience: (contentJson?.experience || []).map(item => {
-      const rawCompany = item.company || "";
-      const rawTitle = item.title || "";
-
-      let company = rawCompany;
-      let title = rawTitle;
-
-      if (!company && title.includes("—")) {
-        const parts = title.split("—").map(part => part.trim()).filter(Boolean);
-
-        if (parts.length >= 2) {
-          title = parts[0];
-          company = parts.slice(1).join(" — ");
-        }
-      }
-
-      if (!company && title.includes("-")) {
-        const parts = title.split("-").map(part => part.trim()).filter(Boolean);
-
-        if (parts.length >= 2) {
-          title = parts[0];
-          company = parts.slice(1).join(" - ");
-        }
-      }
-
-      return {
-        company,
-        title,
-        description: item.bullets || []
-      };
-    }),
-
-    education: (contentJson?.education || []).map(item => {
-      return [item.institution, item.credential, item.fieldOfStudy]
-        .filter(Boolean)
-        .join(" — ");
-    }),
-
-    certifications: (contentJson?.certifications || []).map(item => {
-      return [item.name, item.issuer]
-        .filter(Boolean)
-        .join(" — ");
-    })
-  };
-}
-
-function adaptScoringToAtsAnalysis(scoring) {
-  const scoreSnapshot = scoring?.scoreSnapshot || {};
-
-  return {
-    ats_score: scoreSnapshot.overall || 0,
-    matched_keywords: [],
-    missing_keywords: [],
-    issues: scoring?.issues || [],
-    recommendations: scoring?.recommendations || [],
-    rulesTriggered: scoring?.rulesTriggered || {}
-  };
-}
-
-function adaptComparisonScoresForUI(originalScoring, optimizedScoring) {
-  return {
-    original: adaptScoringToAtsAnalysis(originalScoring),
-    improved: adaptScoringToAtsAnalysis(optimizedScoring)
-  };
-}
-
-// =========================================================
 // FRONTEND STATE
 // =========================================================
 
 let latestFormData = null;
 let latestMatchedKeywords = [];
+let latestUploadedRawText = "";
 let currentPackage = localStorage.getItem("pro_user") === "true" ? "pro" : "free";
 
 // =========================================================
-// PACKAGE GATE LOGIC
-// =========================================================
-
-function isPro() {
-  return currentPackage === "pro";
-}
-
-function premiumBlockedMessage() {
-  setStatus(
-    "Upgrade to Pro to unlock resume optimization, cover letters, all templates, downloads, and advanced ATS insights.",
-    "error"
-  );
-  upgradeNotice.classList.remove("hidden");
-}
-
-function setActivePackage(pkg) {
-  currentPackage = pkg;
-
-  if (pkg === "pro") {
-    localStorage.setItem("pro_user", "true");
-  } else {
-    localStorage.removeItem("pro_user");
-  }
-
-  freePackageCard.classList.toggle("active", pkg === "free");
-  proPackageCard.classList.toggle("active", pkg === "pro");
-
-  updatePremiumLocks();
-
-  // If user is free, force professional template.
-  // If user is pro, keep currently selected template.
-  if (!isPro()) {
-    forceTemplateSelection("professional");
-  } else {
-    forceTemplateSelection(templateSelect.value || "professional");
-  }
-}
-
-function updatePremiumLocks() {
-  const locked = !isPro();
-
-  improveResumeBtn.classList.toggle("locked-button", locked);
-  downloadPdfBtn.classList.toggle("locked-button", locked);
-  downloadDocxBtn.classList.toggle("locked-button", locked);
-  generateCoverLetterBtn.classList.toggle("locked-button", locked);
-  downloadCoverLetterBtn.classList.toggle("locked-button", locked);
-
-  templateCards.forEach(card => {
-    const template = card.dataset.template;
-    const shouldLock = locked && template !== "professional";
-    card.classList.toggle("locked-template", shouldLock);
-  });
-
-  if (locked) {
-    upgradeNotice.classList.remove("hidden");
-  } else {
-    upgradeNotice.classList.add("hidden");
-  }
-}
-
-// =========================================================
-// TEMPLATE SELECTION LOGIC
-// =========================================================
-
-function forceTemplateSelection(template) {
-  templateCards.forEach(card => {
-    card.classList.toggle("active", card.dataset.template === template);
-  });
-
-  templateSelect.value = template;
-  templateNote.textContent =
-    TEMPLATE_NOTES[template] || TEMPLATE_NOTES.professional;
-}
-
-function setActiveTemplateCard(template) {
-  if (!isPro() && template !== "professional") {
-    premiumBlockedMessage();
-    forceTemplateSelection("professional");
-    return;
-  }
-
-  forceTemplateSelection(template);
-}
-
-// =========================================================
-// GENERAL UI HELPERS
+// GENERAL HELPERS
 // =========================================================
 
 function getFormData() {
@@ -409,7 +167,7 @@ function setStatus(message, type = "info") {
 }
 
 function getErrorMessage(error, fallbackMessage) {
-  if (error.name === "TypeError") {
+  if (error?.name === "TypeError") {
     return "Unable to reach the server. Please check your connection and try again.";
   }
   return fallbackMessage;
@@ -466,7 +224,269 @@ function highlightText(text, keywords) {
 }
 
 // =========================================================
-// RESUME PREVIEW RENDERING
+// REQUEST BUILDERS
+// =========================================================
+
+function composeRawResumeText(formData) {
+  const sections = [];
+
+  const basics = [
+    formData.name,
+    formData.email,
+    formData.phone,
+    formData.location
+  ].filter(Boolean);
+
+  if (basics.length) {
+    sections.push(basics.join(" | "));
+  }
+
+  if (formData.skills) {
+    sections.push("SKILLS");
+    sections.push(formData.skills);
+  }
+
+  if (formData.experience) {
+    sections.push("EXPERIENCE");
+    sections.push(formData.experience);
+  }
+
+  if (formData.education) {
+    sections.push("EDUCATION");
+    sections.push(formData.education);
+  }
+
+  if (formData.certifications) {
+    sections.push("CERTIFICATIONS");
+    sections.push(formData.certifications);
+  }
+
+  return sections.join("\n\n").trim();
+}
+
+async function postResumeApi(path, payload) {
+  const response = await fetch(`${API_BASE_URL}${path}`,{
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data?.error || `Request failed with status ${response.status}`);
+  }
+
+  return data;
+}
+
+async function scanResumeRequest(rawText, jobDescription) {
+  return postResumeApi("/scan", {
+    rawText,
+    jobDescription
+  });
+}
+
+async function optimizeResumeRequest(rawText, jobDescription) {
+  return postResumeApi("/optimize", {
+    rawText,
+    jobDescription
+  });
+}
+
+// =========================================================
+// RESPONSE ADAPTERS
+// =========================================================
+
+function adaptContentJsonToPreviewResume(contentJson) {
+
+  const basics = contentJson?.basics || {};
+
+  const rawFullName = basics.fullName || "";
+
+  // Handle cases where the parser placed contact info in fullName
+  const basicsParts = rawFullName
+    .split("|")
+    .map(part => part.trim())
+    .filter(Boolean);
+
+  const extractedName = basicsParts[0] || rawFullName || "";
+  const extractedEmail = basics.email || basicsParts[1] || "";
+  const extractedPhone = basics.phone || basicsParts[2] || "";
+  const extractedLocation = basics.location || basicsParts[3] || "";
+
+  return {
+
+    full_name: extractedName,
+    email: extractedEmail,
+    phone: extractedPhone,
+    location: extractedLocation,
+
+    professional_summary: contentJson?.summary || "",
+
+    skills: [
+      ...(contentJson?.skills?.core || []),
+      ...(contentJson?.skills?.technical || []),
+      ...(contentJson?.skills?.tools || []),
+      ...(contentJson?.skills?.soft || [])
+    ],
+
+    professional_experience: (contentJson?.experience || []).map(item => {
+
+      let company = item.company || "";
+      let title = item.title || "";
+
+      // Handle cases where company + title are merged
+      if (!company && title.includes("—")) {
+        const parts = title.split("—").map(p => p.trim()).filter(Boolean);
+
+        if (parts.length >= 2) {
+          title = parts[0];
+          company = parts.slice(1).join(" — ");
+        }
+      }
+
+      if (!company && title.includes("-")) {
+        const parts = title.split("-").map(p => p.trim()).filter(Boolean);
+
+        if (parts.length >= 2) {
+          title = parts[0];
+          company = parts.slice(1).join(" - ");
+        }
+      }
+
+      return {
+        company,
+        title,
+        description: item?.bullets || []
+      };
+
+    }),
+
+    education: (contentJson?.education || []).map(item =>
+      [item.institution, item.credential, item.fieldOfStudy]
+        .filter(Boolean)
+        .join(" — ")
+    ),
+
+    certifications: (contentJson?.certifications || []).map(item =>
+      [item.name, item.issuer]
+        .filter(Boolean)
+        .join(" — ")
+    )
+
+  };
+}
+
+function adaptScoringToAtsAnalysis(scoring, jobIntelligence) {
+
+  const scoreSnapshot = scoring?.scoreSnapshot || {};
+
+  return {
+
+    ats_score: scoreSnapshot.overall || 0,
+
+    matched_keywords: jobIntelligence?.matchedKeywords || [],
+
+    missing_keywords: jobIntelligence?.missingKeywords || [],
+
+    issues: scoring?.issues || [],
+
+    recommendations: scoring?.recommendations || [],
+
+    rulesTriggered: scoring?.rulesTriggered || {}
+
+  };
+
+}
+
+// =========================================================
+// PACKAGE GATE LOGIC
+// =========================================================
+
+function isPro() {
+  return currentPackage === "pro";
+}
+
+function premiumBlockedMessage() {
+  setStatus(
+    "Upgrade to Pro to unlock resume optimization, cover letters, all templates, downloads, and advanced ATS insights.",
+    "error"
+  );
+  upgradeNotice.classList.remove("hidden");
+}
+
+function setActivePackage(pkg) {
+  currentPackage = pkg;
+
+  if (pkg === "pro") {
+    localStorage.setItem("pro_user", "true");
+  } else {
+    localStorage.removeItem("pro_user");
+  }
+
+  freePackageCard.classList.toggle("active", pkg === "free");
+  proPackageCard.classList.toggle("active", pkg === "pro");
+
+  updatePremiumLocks();
+
+  if (!isPro()) {
+    forceTemplateSelection("professional");
+  } else {
+    forceTemplateSelection(templateSelect.value || "professional");
+  }
+}
+
+function updatePremiumLocks() {
+  const locked = !isPro();
+
+  improveResumeBtn.classList.toggle("locked-button", locked);
+  downloadPdfBtn.classList.toggle("locked-button", locked);
+  downloadDocxBtn.classList.toggle("locked-button", locked);
+  generateCoverLetterBtn.classList.toggle("locked-button", locked);
+  downloadCoverLetterBtn.classList.toggle("locked-button", locked);
+
+  templateCards.forEach(card => {
+    const template = card.dataset.template;
+    const shouldLock = locked && template !== "professional";
+    card.classList.toggle("locked-template", shouldLock);
+  });
+
+  if (locked) {
+    upgradeNotice.classList.remove("hidden");
+  } else {
+    upgradeNotice.classList.add("hidden");
+  }
+}
+
+// =========================================================
+// TEMPLATE SELECTION LOGIC
+// =========================================================
+
+function forceTemplateSelection(template) {
+  templateCards.forEach(card => {
+    card.classList.toggle("active", card.dataset.template === template);
+  });
+
+  templateSelect.value = template;
+  templateNote.textContent =
+    TEMPLATE_NOTES[template] || TEMPLATE_NOTES.professional;
+}
+
+function setActiveTemplateCard(template) {
+  if (!isPro() && template !== "professional") {
+    premiumBlockedMessage();
+    forceTemplateSelection("professional");
+    return;
+  }
+
+  forceTemplateSelection(template);
+}
+
+// =========================================================
+// RENDER HELPERS
 // =========================================================
 
 function renderList(items, keywords = []) {
@@ -621,10 +641,6 @@ function renderResumePreview(resume, template = "professional", keywords = []) {
   `;
 }
 
-// =========================================================
-// ATS RENDERING
-// =========================================================
-
 function renderKeywordPills(items, type) {
   return (items || [])
     .map(keyword => `<li><span class="keyword-pill ${type}">${escapeHtml(keyword)}</span></li>`)
@@ -640,26 +656,26 @@ function renderATS(analysis) {
   matchedKeywords.innerHTML = renderKeywordPills(analysis.matched_keywords, "matched");
   missingKeywords.innerHTML = renderKeywordPills(analysis.missing_keywords, "missing");
 
-keywordStatus.classList.remove("hidden", "keyword-status-success", "keyword-status-info");
+  keywordStatus.classList.remove("hidden", "keyword-status-success", "keyword-status-info");
 
-const hasKeywordArrays =
-  Array.isArray(analysis.matched_keywords) &&
-  Array.isArray(analysis.missing_keywords) &&
-  (analysis.matched_keywords.length > 0 || analysis.missing_keywords.length > 0);
+  const hasKeywordArrays =
+    Array.isArray(analysis.matched_keywords) &&
+    Array.isArray(analysis.missing_keywords) &&
+    (analysis.matched_keywords.length > 0 || analysis.missing_keywords.length > 0);
 
-if (!hasKeywordArrays) {
-  keywordStatus.textContent =
-    "Detailed job-description keyword matching is not yet enabled in this build.";
-  keywordStatus.classList.add("keyword-status-info");
-  matchedKeywords.innerHTML = "";
-  missingKeywords.innerHTML = "";
-} else if (analysis.missing_keywords.length === 0) {
-  keywordStatus.textContent = "All detected job-description keywords are covered ✓";
-  keywordStatus.classList.add("keyword-status-success");
-} else {
-  keywordStatus.textContent = `Still missing ${analysis.missing_keywords.length} job-description keyword(s).`;
-  keywordStatus.classList.add("keyword-status-info");
-}
+  if (!hasKeywordArrays) {
+    keywordStatus.textContent =
+      "Detailed job-description keyword matching is not yet enabled in this build.";
+    keywordStatus.classList.add("keyword-status-info");
+    matchedKeywords.innerHTML = "";
+    missingKeywords.innerHTML = "";
+  } else if (analysis.missing_keywords.length === 0) {
+    keywordStatus.textContent = "All detected job-description keywords are covered ✓";
+    keywordStatus.classList.add("keyword-status-success");
+  } else {
+    keywordStatus.textContent = `Still missing ${analysis.missing_keywords.length} job-description keyword(s).`;
+    keywordStatus.classList.add("keyword-status-info");
+  }
 }
 
 function renderScoreComparison(beforeScore, afterScore) {
@@ -713,10 +729,6 @@ function renderImprovementSummary(originalAnalysis, improvedAnalysis) {
   }
 }
 
-// =========================================================
-// ADVANCED INSIGHT PANELS
-// =========================================================
-
 function renderSkillGapAnalysis(matched, missing) {
   skillGapPanel.classList.remove("hidden");
 
@@ -724,24 +736,21 @@ function renderSkillGapAnalysis(matched, missing) {
   partialSkills.innerHTML = "";
   missingSkills.innerHTML = "";
 
-  const safeMatched = matched || [];
-  const safeMissing = missing || [];
-
-  const strong = safeMatched.slice(0, Math.min(6, safeMatched.length));
-  const partial = safeMatched.slice(6, 10);
-  const gaps = safeMissing.slice(0, 8);
-
   const hasRealSkillData =
-  Array.isArray(matched) &&
-  Array.isArray(missing) &&
-  (matched.length > 0 || missing.length > 0);
+    Array.isArray(matched) &&
+    Array.isArray(missing) &&
+    (matched.length > 0 || missing.length > 0);
 
-if (!hasRealSkillData) {
-  strongSkills.innerHTML = `<span class="skill-pill skill-strong">Detailed skill matching will be enabled with JD-aware scoring</span>`;
-  partialSkills.innerHTML = `<span class="skill-pill skill-partial">Current build focuses on general resume scoring</span>`;
-  missingSkills.innerHTML = `<span class="skill-pill skill-missing">Skill gap detection is deferred for a later phase</span>`;
-  return;
-}
+  if (!hasRealSkillData) {
+    strongSkills.innerHTML = `<span class="skill-pill skill-strong">Detailed skill matching will be enabled with JD-aware scoring</span>`;
+    partialSkills.innerHTML = `<span class="skill-pill skill-partial">Current build focuses on general resume scoring</span>`;
+    missingSkills.innerHTML = `<span class="skill-pill skill-missing">Skill gap detection is deferred for a later phase</span>`;
+    return;
+  }
+
+  const strong = matched.slice(0, Math.min(6, matched.length));
+  const partial = matched.slice(6, 10);
+  const gaps = missing.slice(0, 8);
 
   strong.forEach(skill => {
     strongSkills.innerHTML += `<span class="skill-pill skill-strong">${escapeHtml(skill)}</span>`;
@@ -971,56 +980,7 @@ function resetCoverLetter() {
 }
 
 // =========================================================
-// COVER LETTER RENDERING
-// =========================================================
-
-function renderCoverLetter(text) {
-  const lines = text.split("\n").map(line => line.trim()).filter(line => line.length > 0);
-
-  if (lines.length < 4) {
-    coverLetterPreview.textContent = text;
-    coverLetterSection.classList.remove("hidden");
-    return;
-  }
-
-  const name = lines[0] || "";
-  const contact = lines[1] || "";
-
-  let greetingIndex = lines.findIndex(line => line.toLowerCase().startsWith("dear "));
-  let closingIndex = lines.findIndex(line =>
-    line.toLowerCase() === "sincerely," ||
-    line.toLowerCase() === "kind regards," ||
-    line.toLowerCase() === "best regards,"
-  );
-
-  if (greetingIndex === -1) greetingIndex = 2;
-  if (closingIndex === -1) closingIndex = lines.length - 2;
-
-  const greeting = lines[greetingIndex] || "Dear Hiring Manager,";
-  const bodyParagraphs = lines.slice(greetingIndex + 1, closingIndex);
-  const closing = lines[closingIndex] || "Sincerely,";
-  const signature = lines[closingIndex + 1] || name;
-
-  coverLetterPreview.innerHTML = `
-    <div class="cover-letter-header">
-      <div class="cover-letter-name">${escapeHtml(name)}</div>
-      <div class="cover-letter-contact">${escapeHtml(contact)}</div>
-    </div>
-
-    <div class="cover-letter-greeting">${escapeHtml(greeting)}</div>
-    ${bodyParagraphs.map(p => `<p class="cover-letter-paragraph">${escapeHtml(p)}</p>`).join("")}
-
-    <div class="cover-letter-closing">
-      <p>${escapeHtml(closing)}</p>
-      <p>${escapeHtml(signature)}</p>
-    </div>
-  `;
-
-  coverLetterSection.classList.remove("hidden");
-}
-
-// =========================================================
-// DOWNLOAD LOGIC
+// UNSUPPORTED FEATURE STUBS
 // =========================================================
 
 async function downloadFile(endpoint, filename) {
@@ -1052,7 +1012,6 @@ templateCards.forEach(card => {
   });
 });
 
-// Initialize UI from saved package state
 setActivePackage(currentPackage);
 
 // =========================================================
@@ -1062,13 +1021,6 @@ setActivePackage(currentPackage);
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  latestFormData = getFormData();
-  const rawText = composeRawResumeText(latestFormData);
-
-  generateBtn.disabled = true;
-  generateBtn.textContent = "Scanning...";
-  actions.classList.add("hidden");
-  atsPanel.classList.add("hidden");
   resetScoreComparison();
   resetKeywordStatus();
   resetSkillGapAnalysis();
@@ -1076,49 +1028,144 @@ form.addEventListener("submit", async (event) => {
   resetResumeComparison();
   resetRewriteExplanations();
   resetCoverLetter();
-  showLoading("Parsing and scoring resume...");
+
+  generateBtn.disabled = true;
+  generateBtn.textContent = "Scanning...";
+  actions.classList.add("hidden");
+  atsPanel.classList.add("hidden");
+
+  showLoading("Analyzing resume...");
   setStatus("", "info");
 
   try {
-    const result = await scanResumeRequest(rawText);
+    const file = resumeUpload?.files?.[0];
 
-    const parser = result.data.parser;
-    const scoring = result.data.scoring;
+    let parser;
+    let scoring;
+    let jobIntelligence;
+    let adaptedResume;
+    let adaptedAnalysis;
 
-    const adaptedResume = adaptContentJsonToPreviewResume(
-      parser.contentJson
-    );
-    const adaptedAnalysis = adaptScoringToAtsAnalysis(scoring);
+// =========================================================
+// FILE UPLOAD PATH
+// =========================================================
 
+if (file) {
+
+  const formData = new FormData();
+
+  formData.append("resume", file);
+
+  formData.append(
+    "jobDescription",
+    document.getElementById("job_description").value.trim()
+  );
+
+  const response = await fetch("http://localhost:3000/api/resume/upload", {
+    method: "POST",
+    body: formData
+  });
+
+  const result = await response.json();
+
+parser = result.data.parser;
+scoring = result.data.scoring;
+jobIntelligence = result.data.jobIntelligence;
+
+adaptedResume = adaptContentJsonToPreviewResume(parser.contentJson);
+adaptedAnalysis = adaptScoringToAtsAnalysis(scoring, jobIntelligence);
+
+latestUploadedRawText = result.data.rawText || "";
+
+latestFormData = {
+  template: templateSelect.value,
+  job_description: document.getElementById("job_description").value.trim()
+};
+
+}
+
+    // =========================================================
+    // MANUAL INPUT PATH
+    // =========================================================
+    else {
+      const nameValue = document.getElementById("name").value.trim();
+      const emailValue = document.getElementById("email").value.trim();
+
+      if (!nameValue || !emailValue) {
+        throw new Error("Please fill out Full Name and Email, or upload a resume file.");
+      }
+
+      latestFormData = getFormData();
+
+      const rawText = latestUploadedRawText || composeRawResumeText(latestFormData);
+
+      const result = await scanResumeRequest(
+        rawText,
+        latestFormData.job_description
+      );
+
+      if (!result?.success) {
+        throw new Error(result?.error || "Resume scan failed");
+      }
+
+      parser = result.data.parser;
+      scoring = result.data.scoring;
+      jobIntelligence = result.data.jobIntelligence;
+
+      adaptedResume = adaptContentJsonToPreviewResume(parser.contentJson);
+      adaptedAnalysis = adaptScoringToAtsAnalysis(scoring, jobIntelligence);
+    }
+
+    // =========================================================
+    // RENDER RESULTS
+    // =========================================================
     renderATS(adaptedAnalysis);
+
     renderResumePreview(
       adaptedResume,
-      latestFormData.template,
+      latestFormData?.template || templateSelect.value || "professional",
       latestMatchedKeywords
     );
 
     if (isPro()) {
-      renderSkillGapAnalysis([], []);
-      renderResumeStrengthMeter(adaptedAnalysis, adaptedResume);
+      renderSkillGapAnalysis(
+        adaptedAnalysis.matched_keywords,
+        adaptedAnalysis.missing_keywords
+      );
+
+      renderResumeStrengthMeter(
+        adaptedAnalysis,
+        adaptedResume
+      );
     }
 
     actions.classList.remove("hidden");
-    setStatus("Resume scan completed successfully.", "success");
+
+    setStatus(
+      file
+        ? "Resume uploaded and analyzed successfully."
+        : "Resume scan completed successfully.",
+      "success"
+    );
   } catch (error) {
     console.error(error);
+
     setStatus(
-      getErrorMessage(error, "Unable to scan the resume right now. Please try again."),
+      getErrorMessage(
+        error,
+        error?.message || "Unable to analyze the resume. Please try again."
+      ),
       "error"
     );
   } finally {
     hideLoading();
     generateBtn.disabled = false;
-    generateBtn.textContent = "Generate Resume Preview";
+    generateBtn.textContent = "Scan Resume Preview";
   }
 });
 
 improveResumeBtn.addEventListener("click", async () => {
-  if (!latestFormData) {
+  if (!latestFormData && !latestUploadedRawText) {
     setStatus("Generate a resume preview before improving it.", "error");
     return;
   }
@@ -1128,7 +1175,7 @@ improveResumeBtn.addEventListener("click", async () => {
     return;
   }
 
-  const rawText = composeRawResumeText(latestFormData);
+  const rawText = latestUploadedRawText || composeRawResumeText(latestFormData);
 
   improveResumeBtn.disabled = true;
   generateBtn.disabled = true;
@@ -1136,30 +1183,43 @@ improveResumeBtn.addEventListener("click", async () => {
   downloadDocxBtn.disabled = true;
   generateCoverLetterBtn.disabled = true;
   downloadCoverLetterBtn.disabled = true;
+
   showLoading("Optimizing resume and comparing improvements...");
   setStatus("", "info");
 
   try {
-    const result = await optimizeResumeRequest(rawText);
+    const result = await optimizeResumeRequest(
+      rawText,
+      latestFormData?.job_description || ""
+    );
 
     const parser = result.data.parser;
     const originalScoring = result.data.originalScoring;
     const optimizer = result.data.optimizer;
     const optimizedScoring = result.data.optimizedScoring;
     const comparison = result.data.comparison;
+    const jobIntelligence = result.data.jobIntelligence;
 
-    const originalResume = adaptContentJsonToPreviewResume(
-      parser.contentJson
-    );
+    const originalResume = adaptContentJsonToPreviewResume(parser.contentJson);
     const improvedResume = adaptContentJsonToPreviewResume(
       optimizer.optimizedContentJson
     );
 
-    const adaptedOriginalAnalysis = adaptScoringToAtsAnalysis(originalScoring);
-    const adaptedImprovedAnalysis = adaptScoringToAtsAnalysis(optimizedScoring);
+    const adaptedOriginalAnalysis = adaptScoringToAtsAnalysis(
+      originalScoring,
+      jobIntelligence
+    );
+
+    const adaptedImprovedAnalysis = adaptScoringToAtsAnalysis(
+      optimizedScoring,
+      jobIntelligence
+    );
 
     renderATS(adaptedImprovedAnalysis);
-    renderSkillGapAnalysis([], []);
+    renderSkillGapAnalysis(
+      adaptedImprovedAnalysis.matched_keywords,
+      adaptedImprovedAnalysis.missing_keywords
+    );
     renderResumeStrengthMeter(adaptedImprovedAnalysis, improvedResume);
     renderResumePreview(
       improvedResume,
@@ -1193,7 +1253,10 @@ improveResumeBtn.addEventListener("click", async () => {
   } catch (error) {
     console.error(error);
     setStatus(
-      getErrorMessage(error, "Unable to improve the resume right now. Please try again."),
+      getErrorMessage(
+        error,
+        "Unable to improve the resume right now. Please try again."
+      ),
       "error"
     );
   } finally {
@@ -1230,10 +1293,6 @@ downloadDocxBtn.addEventListener("click", async () => {
 downloadCoverLetterBtn.addEventListener("click", async () => {
   await downloadFile("generate-cover-letter-docx", "cover_letter.docx");
 });
-
-// =========================================================
-// STRIPE CHECKOUT LOGIC
-// =========================================================
 
 upgradeBtn.addEventListener("click", async () => {
   setStatus(

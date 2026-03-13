@@ -1,10 +1,12 @@
 import { ResumePreviewCard } from '../../../components/ResumePreviewCard'
+import type { ResumeTemplate } from '../../../types/resumeTemplate'
 import type { ResumeScanIssue, ResumeScanResponse } from '../types/resumeScan.types'
 
 interface ResumeScanResultProps {
   result: ResumeScanResponse
   onOptimizeRequested?: () => void
   isOptimizing?: boolean
+  template?: ResumeTemplate
 }
 
 function getScoreMeta(score: number) {
@@ -54,10 +56,46 @@ function getSeverityStyles(severity: ResumeScanIssue['severity']) {
   }
 }
 
+function getCategoryMeta(name: string) {
+  switch (name) {
+    case 'Keyword Alignment':
+      return {
+        maxScore: 40,
+        description: 'Measures how closely the resume matches the job description language.',
+      }
+    case 'Experience Strength':
+      return {
+        maxScore: 25,
+        description: 'Measures whether experience bullets are action-oriented and substantive.',
+      }
+    case 'Leadership Strength':
+      return {
+        maxScore: 10,
+        description: 'Measures leadership, ownership, and accountability language.',
+      }
+    case 'Section Completeness':
+      return {
+        maxScore: 15,
+        description: 'Measures whether the core resume sections are present and populated.',
+      }
+    case 'Industry Alignment':
+      return {
+        maxScore: 10,
+        description: 'Measures how closely the resume’s domain aligns with the target role.',
+      }
+    default:
+      return {
+        maxScore: 100,
+        description: 'Explains one part of the overall ATS score.',
+      }
+  }
+}
+
 export function ResumeScanResult({
   result,
   onOptimizeRequested,
   isOptimizing = false,
+  template = 'professional',
 }: ResumeScanResultProps) {
   const scoreMeta = getScoreMeta(result.overallScore)
   const hasKeywordAnalysis =
@@ -132,18 +170,20 @@ export function ResumeScanResult({
         </div>
       </div>
 
-      <ResumePreviewCard
+    <ResumePreviewCard
         title="Resume Preview"
         subtitle="Current version used for ATS analysis"
         content={result.previewText}
+        structuredResume={result.parsedResume}
         highlightKeywords={result.matchedKeywords}
         highlightLabel="Matched Keywords"
-      />
+        template={template}
+    />
 
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
           gap: '16px',
         }}
       >
@@ -156,36 +196,61 @@ export function ResumeScanResult({
               background: '#ffffff',
             }}
           >
-            <h3 style={{ marginBottom: '8px' }}>Category Scores</h3>
+            <h3 style={{ marginBottom: '8px' }}>Score Breakdown</h3>
             <p style={{ margin: 0, color: '#6b7280' }}>No category scores available.</p>
           </div>
         ) : (
-          result.categoryScores.map((category) => (
-            <div
-              key={category.name}
-              style={{
-                padding: '18px',
-                borderRadius: '16px',
-                border: '1px solid #e5e7eb',
-                background: '#ffffff',
-              }}
-            >
-              <p style={{ marginBottom: '8px', color: '#6b7280', fontSize: '0.95rem' }}>
-                {category.name}
-              </p>
-              <div style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '10px' }}>
-                {category.score}
-              </div>
+          result.categoryScores.map((category) => {
+            const categoryMeta = getCategoryMeta(category.name)
 
-              <ul style={{ color: '#4b5563' }}>
-                {category.feedback.map((item, index) => (
-                  <li key={`${category.name}-${index}`} style={{ marginBottom: '6px' }}>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))
+            return (
+              <div
+                key={category.name}
+                style={{
+                  padding: '18px',
+                  borderRadius: '16px',
+                  border: '1px solid #e5e7eb',
+                  background: '#ffffff',
+                  display: 'grid',
+                  gap: '10px',
+                }}
+              >
+                <div>
+                  <p style={{ marginBottom: '6px', color: '#6b7280', fontSize: '0.92rem' }}>
+                    {category.name}
+                  </p>
+                  <div style={{ fontSize: '2rem', fontWeight: 800, color: '#111827' }}>
+                    {category.score} / {categoryMeta.maxScore}
+                  </div>
+                </div>
+
+                <p style={{ margin: 0, color: '#374151', fontSize: '0.94rem', lineHeight: 1.5 }}>
+                  {categoryMeta.description}
+                </p>
+
+                <div
+                  style={{
+                    padding: '12px',
+                    borderRadius: '12px',
+                    background: '#f9fafb',
+                    border: '1px solid #e5e7eb',
+                  }}
+                >
+                  <strong style={{ display: 'block', marginBottom: '8px', color: '#111827' }}>
+                    Why this score
+                  </strong>
+
+                  <ul style={{ margin: 0, paddingLeft: '18px', color: '#4b5563' }}>
+                    {category.feedback.map((item, index) => (
+                      <li key={`${category.name}-${index}`} style={{ marginBottom: '6px' }}>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )
+          })
         )}
       </div>
 
@@ -291,36 +356,36 @@ export function ResumeScanResult({
         </div>
       </div>
 
-{onOptimizeRequested && (
-  <div
-    style={{
-      marginTop: '28px',
-      display: 'flex',
-      justifyContent: 'center',
-    }}
-  >
-<button
-  onClick={onOptimizeRequested}
-  disabled={isOptimizing}
-  onMouseEnter={(e) => (e.currentTarget.style.background = '#020617')}
-  onMouseLeave={(e) => (e.currentTarget.style.background = '#0f172a')}
-  style={{
-    padding: '16px 28px',
-    borderRadius: '999px',
-    border: 'none',
-    background: '#0f172a',
-    color: '#ffffff',
-    fontWeight: 700,
-    fontSize: '1rem',
-    cursor: isOptimizing ? 'not-allowed' : 'pointer',
-    opacity: isOptimizing ? 0.7 : 1,
-    boxShadow: '0 10px 20px rgba(0,0,0,0.15)',
-  }}
->
-      {isOptimizing ? 'Optimizing...' : 'Optimize Resume'}
-    </button>
-  </div>
-)}
+      {onOptimizeRequested && (
+        <div
+          style={{
+            marginTop: '28px',
+            display: 'flex',
+            justifyContent: 'center',
+          }}
+        >
+          <button
+            onClick={onOptimizeRequested}
+            disabled={isOptimizing}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#020617')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = '#0f172a')}
+            style={{
+              padding: '16px 28px',
+              borderRadius: '999px',
+              border: 'none',
+              background: '#0f172a',
+              color: '#ffffff',
+              fontWeight: 700,
+              fontSize: '1rem',
+              cursor: isOptimizing ? 'not-allowed' : 'pointer',
+              opacity: isOptimizing ? 0.7 : 1,
+              boxShadow: '0 10px 20px rgba(0,0,0,0.15)',
+            }}
+          >
+            {isOptimizing ? 'Optimizing...' : 'Optimize Resume'}
+          </button>
+        </div>
+      )}
     </section>
   )
 }

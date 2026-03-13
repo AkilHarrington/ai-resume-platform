@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ApiError } from '../../../types/api'
+import type { ResumeTemplate } from '../../../types/resumeTemplate'
 import { optimizeResume } from '../api/resumeOptimizeApi'
 import { ResumeOptimizeResult } from './ResumeOptimizeResult'
 import type {
@@ -11,12 +12,42 @@ interface ResumeOptimizeSectionProps {
   seedValues?: ResumeOptimizeRequest | null
   autoRun?: boolean
   onAutoRunComplete?: () => void
+  template?: ResumeTemplate
+}
+
+function getFriendlyErrorMessage(message: string) {
+  if (message.toLowerCase().includes('could not reach the server')) {
+    return {
+      title: 'Unable to connect',
+      body: 'The backend may be stopped or restarting. Confirm the API server is running on port 3000, then try again.',
+    }
+  }
+
+  if (message.toLowerCase().includes('invalid')) {
+    return {
+      title: 'Invalid request',
+      body: 'The resume or job description could not be optimized. Review the text and try again.',
+    }
+  }
+
+  if (message.toLowerCase().includes('server hit an error')) {
+    return {
+      title: 'Server error',
+      body: 'The optimization could not be completed because the server ran into a problem. Please try again in a moment.',
+    }
+  }
+
+  return {
+    title: 'Optimization failed',
+    body: message || 'Something went wrong while optimizing the resume.',
+  }
 }
 
 export function ResumeOptimizeSection({
   seedValues = null,
   autoRun = false,
   onAutoRunComplete,
+  template = 'professional',
 }: ResumeOptimizeSectionProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<ApiError | null>(null)
@@ -48,6 +79,8 @@ export function ResumeOptimizeSection({
   if (!seedValues && !result && !isLoading && !error) {
     return null
   }
+
+  const friendlyError = error ? getFriendlyErrorMessage(error.message) : null
 
   return (
     <section
@@ -81,22 +114,25 @@ export function ResumeOptimizeSection({
         </div>
       )}
 
-      {error && (
+      {friendlyError && (
         <div
           style={{
             marginTop: '20px',
-            padding: '16px',
+            padding: '18px',
             borderRadius: '14px',
             border: '1px solid #fecaca',
             background: '#fef2f2',
             color: '#991b1b',
+            display: 'grid',
+            gap: '8px',
           }}
         >
-          <strong>Error:</strong> {error.message}
+          <strong>{friendlyError.title}</strong>
+          <p style={{ margin: 0 }}>{friendlyError.body}</p>
         </div>
       )}
 
-      {result && <ResumeOptimizeResult result={result} />}
+      {result && <ResumeOptimizeResult result={result} template={template} />}
     </section>
   )
 }

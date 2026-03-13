@@ -1147,3 +1147,40 @@ button:disabled {
 .upgrade-btn:hover {
   background: #1d4ed8;
 }
+
+#strongSkills,
+#partialSkills,
+#missingSkills,
+#addedKeywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.skill-pill,
+.added-keyword-pill {
+  display: inline-flex;
+  align-items: center;
+}
+
+.input-help-text {
+  margin-top: 6px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.upload-file-name {
+  margin-top: 4px;
+  margin-bottom: 12px;
+  font-size: 0.95rem;
+  color: #333;
+  word-break: break-word;
+}
+
+.or-divider {
+  margin: 14px 0;
+  text-align: center;
+  color: #777;
+  font-size: 0.95rem;
+}

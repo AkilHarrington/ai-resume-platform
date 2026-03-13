@@ -1,3 +1,9 @@
+import type { ResumeTemplate } from '../types/resumeTemplate'
+import { ResumeTemplateRenderer } from '../features/resume-templates/renderers/ResumeTemplateRenderer'
+import { parseResumeText } from '../features/resume-templates/utils/parseResumeText'
+import type { StructuredResume } from '../types/resumeSchema'
+import type { ParsedResume } from '../features/resume-scan/types/resumeScan.types'
+
 interface ResumePreviewCardProps {
   title: string
   subtitle?: string
@@ -6,13 +12,8 @@ interface ResumePreviewCardProps {
   highlightKeywords?: string[]
   highlightLabel?: string
   highlightStyle?: 'matched' | 'resolved'
-}
-
-function formatResumeText(content: string) {
-  return content
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
+  template?: ResumeTemplate
+  structuredResume?: ParsedResume
 }
 
 function escapeRegExp(value: string) {
@@ -77,14 +78,33 @@ function renderHighlightedText(
   })
 }
 
-function isSectionHeading(line: string) {
-  return ['summary', 'skills', 'experience', 'education', 'certifications'].includes(
-    line.toLowerCase(),
-  )
-}
+function mapParsedResumeToStructuredResume(parsed?: ParsedResume): StructuredResume | null {
+  if (!parsed) {
+    return null
+  }
 
-function isBullet(line: string) {
-  return line.startsWith('•') || line.startsWith('-')
+  return {
+    fullName: parsed.full_name || '',
+    headline: '',
+    contact: {
+      email: parsed.email || '',
+      phone: parsed.phone || '',
+      location: parsed.location || '',
+    },
+    summary: parsed.professional_summary || '',
+    skills: parsed.skills || [],
+    experience: (parsed.professional_experience || []).map((item) => ({
+      company: item.company || '',
+      title: item.title || '',
+      bullets: item.description || [],
+    })),
+    education: (parsed.education || []).map((item) => ({
+      institution: item,
+    })),
+    certifications: (parsed.certifications || []).map((item) => ({
+      name: item,
+    })),
+  }
 }
 
 export function ResumePreviewCard({
@@ -95,9 +115,9 @@ export function ResumePreviewCard({
   highlightKeywords = [],
   highlightLabel,
   highlightStyle = 'matched',
+  template = 'professional',
+  structuredResume,
 }: ResumePreviewCardProps) {
-  const lines = formatResumeText(content)
-
   const styles =
     accent === 'success'
       ? {
@@ -115,9 +135,8 @@ export function ResumePreviewCard({
           badgeColor: '#374151',
         }
 
-  const name = lines[0] ?? ''
-  const possibleTitle = lines[1] ?? ''
-  const bodyLines = lines.slice(2)
+  const mappedStructuredResume = mapParsedResumeToStructuredResume(structuredResume)
+  const parsedResume = mappedStructuredResume ?? parseResumeText(content)
 
   return (
     <div
@@ -173,123 +192,17 @@ export function ResumePreviewCard({
               fontWeight: 700,
             }}
           >
-            Preview
+            {renderHighlightedText(
+              template.charAt(0).toUpperCase() + template.slice(1),
+              highlightKeywords,
+              highlightStyle,
+            )}
           </span>
         </div>
       </div>
 
-      <div
-        style={{
-          padding: '32px',
-          minHeight: '460px',
-          background: '#ffffff',
-        }}
-      >
-        {lines.length === 0 ? (
-          <p style={{ margin: 0, color: '#9ca3af' }}>No resume content available yet.</p>
-        ) : (
-          <div>
-            <div style={{ marginBottom: '20px' }}>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: '1.65rem',
-                  fontWeight: 800,
-                  color: '#111827',
-                  letterSpacing: '-0.02em',
-                }}
-              >
-                {renderHighlightedText(name, highlightKeywords, highlightStyle)}
-              </h1>
-
-              {possibleTitle ? (
-                <p
-                  style={{
-                    margin: '6px 0 0',
-                    fontSize: '1rem',
-                    color: '#4b5563',
-                    fontWeight: 600,
-                  }}
-                >
-                  {renderHighlightedText(possibleTitle, highlightKeywords, highlightStyle)}
-                </p>
-              ) : null}
-            </div>
-
-            <div style={{ display: 'grid', gap: '10px' }}>
-              {bodyLines.map((line, index) => {
-                if (isSectionHeading(line)) {
-                  return (
-                    <div
-                      key={`${line}-${index}`}
-                      style={{
-                        marginTop: '14px',
-                        paddingTop: '12px',
-                        borderTop: '1px solid #e5e7eb',
-                      }}
-                    >
-                      <h2
-                        style={{
-                          margin: 0,
-                          fontSize: '0.9rem',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.08em',
-                          color: '#111827',
-                          fontWeight: 800,
-                        }}
-                      >
-                        {renderHighlightedText(line, highlightKeywords, highlightStyle)}
-                      </h2>
-                    </div>
-                  )
-                }
-
-                if (isBullet(line)) {
-                  return (
-                    <div
-                      key={`${line}-${index}`}
-                      style={{
-                        display: 'flex',
-                        gap: '10px',
-                        alignItems: 'flex-start',
-                      }}
-                    >
-                      <span style={{ color: '#6b7280', lineHeight: 1.7 }}>•</span>
-                      <p
-                        style={{
-                          margin: 0,
-                          color: '#1f2937',
-                          fontSize: '0.97rem',
-                          lineHeight: 1.7,
-                        }}
-                      >
-                        {renderHighlightedText(
-                          line.replace(/^[•-]\s*/, ''),
-                          highlightKeywords,
-                          highlightStyle,
-                        )}
-                      </p>
-                    </div>
-                  )
-                }
-
-                return (
-                  <p
-                    key={`${line}-${index}`}
-                    style={{
-                      margin: 0,
-                      color: '#1f2937',
-                      fontSize: '0.98rem',
-                      lineHeight: 1.75,
-                    }}
-                  >
-                    {renderHighlightedText(line, highlightKeywords, highlightStyle)}
-                  </p>
-                )
-              })}
-            </div>
-          </div>
-        )}
+      <div style={{ padding: '18px', background: '#f8fafc' }}>
+        <ResumeTemplateRenderer resume={parsedResume} template={template} />
       </div>
     </div>
   )

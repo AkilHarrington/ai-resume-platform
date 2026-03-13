@@ -20,7 +20,7 @@ import { Router } from 'express';
 import {
   optimizeResumeController,
   scanResumeController,
-} from '../controllers/resume.controller';
+} from '../../controllers/resume.controller';
 
 const router = Router();
 
