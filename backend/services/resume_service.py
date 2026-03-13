@@ -1,46 +1,42 @@
 # =========================================================
 # File: services/resume_service.py
 # Purpose:
-# Core AI service layer for resume generation and optimization.
+# Resume generation and optimization logic for the AI Resume Platform.
 #
 # Responsibilities:
-# - build prompts for the OpenAI model
-# - generate structured resume output
-# - optimize resume content against a job description
-# - preserve factual consistency while improving ATS alignment
+# - build AI prompts for resume generation and optimization
+# - call OpenAI
+# - parse JSON model output safely
+# - return structured resume data
 #
-# Key Notes:
-# - this file is one of the most important product-quality files
-# - prompt design strongly affects resume realism and ATS performance
-# - future Phase 2 work such as controlled variation, tone preservation,
-#   and anti-AI voice detection will likely be implemented here
-# =========================================================
-
-# =========================================================
-# Imports and OpenAI Client Setup
+# Notes:
+# - this version is aligned with the current React frontend
+# - optimizer returns structured resume JSON
+# - incomplete AI responses fall back safely to original data
 # =========================================================
 
 import json
 import os
+import re
 
-from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv()
+
+# =========================================================
+# Environment / Client
+# =========================================================
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 
 
-def get_openai_client():
+def get_openai_client() -> OpenAI:
     """
-    Create the OpenAI client lazily so the app does not fail at import time
-    if the environment variable is missing.
+    Create and return an OpenAI client.
 
-    Required environment variable:
-    - OPENAI_API_KEY
+    Raises:
+        RuntimeError: if OPENAI_API_KEY is missing
     """
     api_key = os.getenv("OPENAI_API_KEY")
-
     if not api_key:
         raise RuntimeError(
             "OPENAI_API_KEY is missing. Set it in your environment or .env file."
@@ -50,208 +46,165 @@ def get_openai_client():
 
 
 # =========================================================
-# Shared Parsing / Output Helpers
+# JSON Parsing Helpers
 # =========================================================
 
-def parse_json_response(text_output):
+def parse_json_response(text: str):
     """
-    Parse the model's response into JSON.
+    Parse a JSON object from a model response.
 
-    Notes:
-    - The prompts explicitly instruct the model to return JSON only.
-    - If the model ever returns invalid JSON, this function will raise and
-      the calling route will fail visibly, which is useful during MVP testing.
+    Supports:
+    - raw JSON
+    - markdown fenced JSON blocks
     """
-    return json.loads(text_output)
+    if not text or not isinstance(text, str):
+        return None
+
+    cleaned = text.strip()
+
+    # Remove fenced code block if present
+    fenced_match = re.search(r"```(?:json)?\s*(.*?)\s*```", cleaned, re.DOTALL)
+    if fenced_match:
+        cleaned = fenced_match.group(1).strip()
+
+    # First try direct JSON parse
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Fallback: extract first JSON object block
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        candidate = cleaned[start : end + 1]
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            return None
+
+    return None
 
 
 # =========================================================
-# Prompt Builders
+# Resume Generation Prompt
 # =========================================================
 
-def build_resume_prompt(data):
+def build_resume_generation_prompt(data) -> str:
     """
-    Build the main resume-generation prompt.
-
-    Goal:
-    - Convert raw user inputs into a structured, ATS-optimized resume JSON.
-    - Preserve truthfulness while improving clarity and alignment to the target role.
+    Build a prompt for generating a structured resume from form data.
     """
     return f"""
-You are an expert executive resume writer and ATS optimization specialist.
+You are a resume generation engine.
 
-Your task is to generate a highly ATS-compatible, professionally written resume in valid JSON format.
+Create a professional structured resume from the candidate details below.
 
-Return ONLY valid JSON in this exact structure:
+Return valid JSON only with this exact structure:
+
 {{
   "full_name": "string",
-  "location": "string",
-  "phone": "string",
   "email": "string",
+  "phone": "string",
+  "location": "string",
   "professional_summary": "string",
   "skills": ["string", "string"],
   "professional_experience": [
     {{
       "company": "string",
       "title": "string",
-      "description": ["string", "string", "string"]
+      "description": ["string", "string"]
     }}
   ],
   "education": ["string"],
   "certifications": ["string"]
 }}
 
-Hard Rules:
-- Return JSON only
-- No markdown
-- No commentary
-- No code fences
-- No placeholder text
-- No bracketed notes
-- No missing-section commentary
-- If a section has no data, return an empty list or empty string
-- Use clear ATS-friendly wording
-- Keep contact information simple and parseable
-- Tailor the resume strongly to the target role
-- Use role-relevant keywords naturally
-- Use concise, achievement-oriented language
-- Prefer measurable impact whenever possible
-- Avoid generic filler language
+Candidate data:
+Name: {getattr(data, "name", "")}
+Email: {getattr(data, "email", "")}
+Phone: {getattr(data, "phone", "")}
+Location: {getattr(data, "location", "")}
+Skills: {getattr(data, "skills", "")}
+Experience: {getattr(data, "experience", "")}
+Education: {getattr(data, "education", "")}
+Certifications: {getattr(data, "certifications", "")}
+Target job description: {getattr(data, "job_description", "")}
 
-Critical Experience Extraction Rules:
-- Carefully extract every explicit employer name from the input and preserve it exactly when provided
-- Carefully extract every explicit job title from the input and preserve it exactly when provided
-- Preserve seniority words such as Senior, Lead, Principal, Manager, Director, Head, VP, Chief when they appear in the input
-- Do not downgrade titles
-- Do not replace known employers with blank values, "Confidential", "N/A", or invented names
-- If the input clearly names a role but no company is given, keep the role and use a truthful generic company label only if absolutely necessary
-- If the input clearly names both role and employer, preserve both exactly
-- Prefer preserving the candidate's stated background over rewriting it into a weaker generic version
-- Keep 4 to 6 bullets per role
-- If a role is explicitly listed in the experience input, it must appear in the output
+Return JSON only.
+""".strip()
 
-Professional Summary Rules:
-- 3 to 5 lines in length
-- Must include years of experience when available
-- Must match the target role closely
-- Must include 4 to 6 relevant keyword themes from the job description
-- Should sound senior and credible, not generic
 
-Skills Rules:
-- Include 10 to 16 highly relevant ATS-friendly skills
-- Prioritize the most important hard skills and leadership skills from the target role
-- Remove duplicates
-- Use short, standard phrasing
-
-Professional Experience Rules:
-- Include all provided roles when possible
-- Each role must contain 4 to 6 bullet points
-- If limited information is available, infer reasonable responsibilities based on the explicit role title and industry
-- Each bullet must begin with a strong action verb
-- Each bullet must contain responsibility + outcome or impact
-- Prefer measurable impact where possible (percentages, budgets, revenue, assets, team size, scale, timelines)
-
-Executive Role Guidance:
-- Emphasize strategic leadership
-- Mention scale indicators such as budgets, revenue, assets, geographic scope
-- Highlight governance, capital allocation, transformation initiatives, and executive decision-making
-
-Technical Role Guidance:
-- Emphasize architecture, systems, scalability, reliability, performance, and team leadership
-
-Operations Role Guidance:
-- Emphasize process improvement, KPIs, cost reduction, compliance, efficiency gains, and operational scale
-
-Candidate Information:
-Name: {data.name}
-Email: {data.email}
-Phone: {data.phone}
-Location: {data.location}
-
-Skills:
-{data.skills}
-
-Experience:
-{data.experience}
-
-Education:
-{data.education}
-
-Certifications:
-{data.certifications}
-
-Target Role / Job Description:
-{data.job_description}
-"""
-
+# =========================================================
+# Resume Optimization Prompt
+# =========================================================
 
 def build_resume_optimization_prompt(existing_resume, job_description, missing_keywords):
     """
-    Build the optimization prompt used to improve an already generated resume.
-
-    Goal:
-    - Keep the same facts
-    - Improve ATS alignment
-    - Add missing keywords naturally
-    - Avoid making the resume sound fake or downgraded
+    Build a strict prompt for optimizing a structured resume while preserving
+    all required sections and returning valid JSON only.
     """
-    keyword_text = ", ".join(missing_keywords) if missing_keywords else "None"
-
     return f"""
-You are an expert ATS resume optimizer.
+You are a resume optimization engine.
 
-You will improve an EXISTING resume by making targeted edits only.
+Your task is to improve the ATS alignment of an EXISTING STRUCTURED RESUME against a target job description.
 
-IMPORTANT:
-You are editing an existing resume, not writing a brand-new one from scratch.
+STRICT RULES:
+- Return the FULL optimized resume as valid JSON only
+- Do NOT return only a summary
+- Do NOT return partial text
+- Do NOT return markdown
+- Do NOT return explanations
+- Do NOT return commentary
+- Do NOT omit sections
+- Preserve the candidate's identity, employers, dates, and job titles
+- Do NOT invent employers, dates, credentials, or promotions
+- Improve wording naturally using the missing keywords where appropriate
+- Keep the resume believable, professional, and ATS-friendly
+- Preserve all major sections if they exist in the original resume
 
-Return ONLY valid JSON in this exact structure:
+You must return JSON with this EXACT structure:
+
 {{
   "full_name": "string",
-  "location": "string",
-  "phone": "string",
   "email": "string",
+  "phone": "string",
+  "location": "string",
   "professional_summary": "string",
   "skills": ["string", "string"],
   "professional_experience": [
     {{
       "company": "string",
       "title": "string",
-      "description": ["string", "string", "string"]
+      "description": ["string", "string"]
     }}
   ],
   "education": ["string"],
   "certifications": ["string"]
 }}
 
-Rules:
-- Return JSON only
-- No markdown
-- No commentary
-- Preserve truthfulness and professionalism
-- Do not add fake employers, degrees, or certifications
-- Preserve original seniority and role level
-- Preserve all known employer names exactly as given
-- Preserve all known job titles exactly as given
-- Do not downgrade titles
-- Do not replace known employers with "Confidential", "N/A", or similar
-- Do not simplify or weaken the candidate's existing experience
-- Keep the same overall structure and facts unless a small wording improvement is needed
-- Improve ATS alignment naturally
-- Incorporate these missing keywords where appropriate: {keyword_text}
-- Do not keyword-stuff
-- Keep the resume targeted to the job description
-- Keep 4 to 6 bullets per role
-- Maintain quantified achievements wherever possible
-- If the existing wording is already strong, make only minimal improvements
-- The improved version should be equal or better in seniority, clarity, and ATS alignment than the original
+OPTIMIZATION GOALS:
+- Improve ATS alignment with the target job description
+- Naturally integrate these missing keywords where truthful and appropriate:
+{missing_keywords}
+- Strengthen the professional summary
+- Strengthen experience bullets
+- Strengthen skills if relevant
+- Preserve the candidate's actual background and credibility
+- Keep the tone professional and realistic
 
-Existing Resume JSON:
-{json.dumps(existing_resume, ensure_ascii=False)}
+IMPORTANT:
+- If a keyword cannot be added truthfully, do not force it
+- Do not change the candidate's real role titles
+- Do not remove experience entries
+- Do not collapse the resume into one paragraph
+- Return the complete optimized structured resume JSON only
 
-Target Role / Job Description:
+Original structured resume:
+{existing_resume}
+
+Target job description:
 {job_description}
-"""
+""".strip()
 
 
 # =========================================================
@@ -260,15 +213,9 @@ Target Role / Job Description:
 
 def generate_resume_content(data):
     """
-    Generate a new structured resume from raw form input.
-
-    Flow:
-    1. Build the prompt
-    2. Send to OpenAI
-    3. Parse the JSON response
-    4. Return structured resume data
+    Generate a structured resume from candidate input.
     """
-    prompt = build_resume_prompt(data)
+    prompt = build_resume_generation_prompt(data)
     client = get_openai_client()
 
     response = client.responses.create(
@@ -276,8 +223,46 @@ def generate_resume_content(data):
         input=prompt,
     )
 
-    text_output = response.output[0].content[0].text
-    return parse_json_response(text_output)
+    try:
+        text_output = response.output[0].content[0].text
+    except (AttributeError, IndexError, KeyError, TypeError):
+        return {
+            "full_name": getattr(data, "name", ""),
+            "email": getattr(data, "email", ""),
+            "phone": getattr(data, "phone", ""),
+            "location": getattr(data, "location", ""),
+            "professional_summary": "",
+            "skills": [],
+            "professional_experience": [],
+            "education": [],
+            "certifications": [],
+        }
+
+    parsed = parse_json_response(text_output)
+    if not isinstance(parsed, dict):
+        return {
+            "full_name": getattr(data, "name", ""),
+            "email": getattr(data, "email", ""),
+            "phone": getattr(data, "phone", ""),
+            "location": getattr(data, "location", ""),
+            "professional_summary": "",
+            "skills": [],
+            "professional_experience": [],
+            "education": [],
+            "certifications": [],
+        }
+
+    return {
+        "full_name": parsed.get("full_name", getattr(data, "name", "")),
+        "email": parsed.get("email", getattr(data, "email", "")),
+        "phone": parsed.get("phone", getattr(data, "phone", "")),
+        "location": parsed.get("location", getattr(data, "location", "")),
+        "professional_summary": parsed.get("professional_summary", ""),
+        "skills": parsed.get("skills", []),
+        "professional_experience": parsed.get("professional_experience", []),
+        "education": parsed.get("education", []),
+        "certifications": parsed.get("certifications", []),
+    }
 
 
 # =========================================================
@@ -292,7 +277,8 @@ def optimize_resume_content(existing_resume, job_description, missing_keywords):
     1. Build the optimization prompt
     2. Send current resume + job description + missing keywords to OpenAI
     3. Parse the JSON response
-    4. Return improved structured resume data
+    4. Validate that the response is complete enough
+    5. Fall back to the original resume if the AI returns something partial or invalid
     """
     prompt = build_resume_optimization_prompt(
         existing_resume,
@@ -306,5 +292,159 @@ def optimize_resume_content(existing_resume, job_description, missing_keywords):
         input=prompt,
     )
 
-    text_output = response.output[0].content[0].text
-    return parse_json_response(text_output)
+    # Safely extract text output
+    try:
+        text_output = response.output[0].content[0].text
+    except (AttributeError, IndexError, KeyError, TypeError):
+        return existing_resume
+
+    optimized_resume = parse_json_response(text_output)
+
+    # Safety fallback:
+    # If parsing fails or the model returns an incomplete structure,
+    # keep the original resume instead of returning a broken partial output.
+    if not isinstance(optimized_resume, dict):
+        return existing_resume
+
+    # Core original fields
+    original_summary = str(existing_resume.get("professional_summary", "")).strip()
+    optimized_summary = str(optimized_resume.get("professional_summary", "")).strip()
+
+    original_experience = existing_resume.get("professional_experience", [])
+    optimized_experience = optimized_resume.get("professional_experience", [])
+
+    original_skills = existing_resume.get("skills", [])
+    optimized_skills = optimized_resume.get("skills", [])
+
+    original_education = existing_resume.get("education", [])
+    optimized_education = optimized_resume.get("education", [])
+
+    original_certs = existing_resume.get("certifications", [])
+    optimized_certs = optimized_resume.get("certifications", [])
+
+    # Require a real summary
+    if not optimized_summary:
+        return existing_resume
+
+    # If the model dropped sections that existed before, reject it
+    if original_experience and not optimized_experience:
+        return existing_resume
+
+    if original_skills and not optimized_skills:
+        return existing_resume
+
+    if original_education and not optimized_education:
+        return existing_resume
+
+    if original_certs and not optimized_certs:
+        return existing_resume
+
+    # If the optimized summary is suspiciously tiny compared to the original,
+    # treat it as incomplete.
+    if original_summary and len(optimized_summary) < max(40, int(len(original_summary) * 0.4)):
+        return existing_resume
+
+    # If the model returned only a lightly structured summary rewrite and lost
+    # the real resume body, reject it.
+    original_total_content = (
+        len(original_summary)
+        + sum(len(str(item)) for item in original_skills)
+        + sum(
+            len(str(role.get("company", "")))
+            + len(str(role.get("title", "")))
+            + sum(len(str(bullet)) for bullet in role.get("description", []))
+            for role in original_experience
+        )
+        + sum(len(str(item)) for item in original_education)
+        + sum(len(str(item)) for item in original_certs)
+    )
+
+    optimized_total_content = (
+        len(optimized_summary)
+        + sum(len(str(item)) for item in optimized_skills)
+        + sum(
+            len(str(role.get("company", "")))
+            + len(str(role.get("title", "")))
+            + sum(len(str(bullet)) for bullet in role.get("description", []))
+            for role in optimized_experience
+        )
+        + sum(len(str(item)) for item in optimized_education)
+        + sum(len(str(item)) for item in optimized_certs)
+    )
+
+    if original_total_content > 0 and optimized_total_content < int(original_total_content * 0.5):
+        return existing_resume
+
+    # Normalize structure to preserve required keys even if the model omits some
+    return {
+        "full_name": optimized_resume.get("full_name", existing_resume.get("full_name", "")),
+        "email": optimized_resume.get("email", existing_resume.get("email", "")),
+        "phone": optimized_resume.get("phone", existing_resume.get("phone", "")),
+        "location": optimized_resume.get("location", existing_resume.get("location", "")),
+        "professional_summary": optimized_summary,
+        "skills": optimized_skills if optimized_skills else original_skills,
+        "professional_experience": (
+            optimized_experience if optimized_experience else original_experience
+        ),
+        "education": optimized_education if optimized_education else original_education,
+        "certifications": optimized_certs if optimized_certs else original_certs,
+    }
+
+def build_resume_text_optimization_prompt(resume_text, job_description, missing_keywords):
+    return f"""
+You are a resume optimization engine.
+
+Rewrite the FULL resume text below to improve ATS alignment with the target job description.
+
+RULES:
+- Return the FULL optimized resume text
+- Do NOT return JSON
+- Do NOT return only a summary
+- Do NOT return explanations
+- Do NOT return markdown fences
+- Preserve the candidate's real background
+- Do NOT invent employers, titles, dates, degrees, or certifications
+- Integrate these missing keywords naturally where truthful and appropriate:
+{missing_keywords}
+- Keep the resume professional, believable, and ATS-friendly
+- Keep all major sections present if they exist
+
+Resume:
+{resume_text}
+
+Target job description:
+{job_description}
+
+Return the complete optimized resume text only.
+""".strip()
+
+
+def optimize_resume_text(resume_text, job_description, missing_keywords):
+    """
+    Optimize raw resume text directly for the React frontend flow.
+    """
+    prompt = build_resume_text_optimization_prompt(
+        resume_text,
+        job_description,
+        missing_keywords,
+    )
+    client = get_openai_client()
+
+    response = client.responses.create(
+        model=OPENAI_MODEL,
+        input=prompt,
+    )
+
+    try:
+        text_output = response.output[0].content[0].text.strip()
+    except (AttributeError, IndexError, KeyError, TypeError):
+        return resume_text
+
+    if not text_output:
+        return resume_text
+
+    # Reject suspiciously tiny or partial outputs
+    if len(text_output) < max(120, int(len(resume_text) * 0.5)):
+        return resume_text
+
+    return text_output

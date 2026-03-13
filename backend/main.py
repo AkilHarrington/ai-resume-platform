@@ -1,49 +1,32 @@
 # =========================================================
 # File: main.py
 # Purpose:
-# FastAPI backend entry point for the AI Resume Platform.
+# FastAPI backend entry point for the current AI Resume Platform frontend.
 #
 # Responsibilities:
-# - define API routes
-# - receive frontend requests
-# - orchestrate resume generation and optimization
-# - create Stripe checkout sessions
-# - return JSON and file responses
+# - expose scan and optimize API routes for the React frontend
+# - validate frontend payloads
+# - orchestrate ATS scoring and resume optimization
+# - return clean JSON responses used by the UI
 #
-# Key Notes:
-# - this file should remain focused on routing/orchestration
-# - heavy AI/business logic should stay in service files
-# - frontend depends on stable response structures from these routes
-# - payment flow is currently MVP-level and uses frontend Pro unlock
-# =========================================================
-
-# =========================================================
-# Imports and Environment Setup
+# Notes:
+# - legacy MVP routes were removed to keep this backend focused
+# - heavy AI/business logic stays in service files
+# - this file should remain routing/orchestration only
 # =========================================================
 
 import os
 
-import stripe
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
 
-from models.resume_models import ResumeRequest
+from models.optimize_models import ResumeOptimizeRequest
+from models.scan_models import ResumeScanRequest
 from services.ats_service import calculate_ats_score
-from services.cover_letter_docx_service import create_cover_letter_docx
-from services.cover_letter_service import generate_cover_letter_content
-from services.docx_service import create_resume_docx
-from services.pdf_service import create_resume_pdf
-from services.resume_service import generate_resume_content, optimize_resume_content
+from services.resume_service import optimize_resume_text
 
 load_dotenv()
-
-# Stripe secret key should be provided through environment variables.
-# Example:
-# export STRIPE_SECRET_KEY="sk_test_..."
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-
 
 # =========================================================
 # FastAPI App Initialization
@@ -51,26 +34,119 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 app = FastAPI(
     title="AI Resume Platform API",
-    version="1.0.0"
+    version="2.0.0",
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://127.0.0.1:5500",
-        "http://localhost:5500",
-        "null",
-        "https://ai-resume-platform-1-da6p.onrender.com",
-        "https://ai-resume-platform-eluf.onrender.com",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
+@app.options("/{rest_of_path:path}")
+async def options_handler(rest_of_path: str):
+    return {"status": "ok"}
 
 # =========================================================
-# Health Check Routes
+# Helpers
+# =========================================================
+
+def build_resume_data_from_text(resume_text: str) -> dict:
+    """
+    Convert raw resume text from the frontend into the minimal structured shape
+    expected by the current ATS and optimization services.
+
+    Current frontend sends raw text only, so we store it inside the
+    professional_summary field as the source text payload.
+    """
+    return {
+        "full_name": "",
+        "email": "",
+        "phone": "",
+        "location": "",
+        "professional_summary": resume_text,
+        "skills": [],
+        "professional_experience": [],
+        "education": [],
+        "certifications": [],
+    }
+
+
+def resume_data_to_text(resume_data: dict) -> str:
+    """
+    Flatten structured resume JSON into preview text for the frontend.
+
+    This is used after optimization so the UI can render a readable full resume
+    preview when the optimizer returns structured JSON.
+    """
+    if not isinstance(resume_data, dict):
+        return ""
+
+    parts: list[str] = []
+
+    full_name = str(resume_data.get("full_name", "")).strip()
+    if full_name:
+        parts.append(full_name)
+
+    email = str(resume_data.get("email", "")).strip()
+    phone = str(resume_data.get("phone", "")).strip()
+    location = str(resume_data.get("location", "")).strip()
+
+    if email:
+        parts.append(email)
+    if phone:
+        parts.append(phone)
+    if location:
+        parts.append(location)
+
+    summary = str(resume_data.get("professional_summary", "")).strip()
+    if summary:
+        parts.extend(["", "Professional Summary", "", summary])
+
+    skills = resume_data.get("skills", [])
+    if skills:
+        parts.extend(["", "Skills", ""])
+        parts.extend(str(skill).strip() for skill in skills if str(skill).strip())
+
+    experience = resume_data.get("professional_experience", [])
+    if experience:
+        parts.extend(["", "Experience", ""])
+        for role in experience:
+            company = str(role.get("company", "")).strip()
+            title = str(role.get("title", "")).strip()
+
+            if company:
+                parts.append(company)
+            if title:
+                parts.append(title)
+
+            for bullet in role.get("description", []):
+                bullet_text = str(bullet).strip()
+                if bullet_text:
+                    parts.append(f"• {bullet_text}")
+
+            parts.append("")
+
+    education = resume_data.get("education", [])
+    if education:
+        parts.extend(["Education", ""])
+        parts.extend(str(item).strip() for item in education if str(item).strip())
+
+    certifications = resume_data.get("certifications", [])
+    if certifications:
+        parts.extend(["", "Certifications", ""])
+        parts.extend(str(item).strip() for item in certifications if str(item).strip())
+
+    return "\n".join(line for line in parts if line is not None).strip()
+
+
+# =========================================================
+# Health Check
 # =========================================================
 
 @app.get("/")
@@ -82,213 +158,108 @@ def root():
 
 
 # =========================================================
-# Resume Generation Routes
+# Frontend API Routes
 # =========================================================
 
-@app.post("/generate-resume")
-def generate_resume(data: ResumeRequest):
+@app.post("/api/resume/scan")
+def resume_scan(data: ResumeScanRequest):
     """
-    Generate a structured resume from the user's submitted form data.
+    Scan raw resume text and return ATS analysis for the React frontend.
+    """
+    job_description = data.jobDescription or ""
+    resume_data = build_resume_data_from_text(data.resumeText)
 
-    Frontend use:
-    - Can be used for basic resume generation if needed.
-    - Current main preview flow primarily uses /ats-score instead.
-    """
-    resume_data = generate_resume_content(data)
+    ats = calculate_ats_score(resume_data, job_description)
+    matched = ats.get("matched_keywords", [])
+    missing = ats.get("missing_keywords", [])
 
     return {
-        "message": "Resume generated",
-        "resume": resume_data,
+        "overallScore": ats.get("ats_score", 0),
+        "summary": "Resume scan completed successfully.",
+        "previewText": data.resumeText,
+        "matchedKeywords": matched,
+        "missingKeywords": missing,
+        "categoryScores": [
+            {
+                "name": "ATS Match",
+                "score": ats.get("ats_score", 0),
+                "feedback": [
+                    f"Matched keywords: {len(matched)}",
+                    f"Missing keywords: {len(missing)}",
+                ],
+            }
+        ],
+        "issues": [
+            {
+                "id": f"missing-keyword-{index}",
+                "title": "Missing Keyword",
+                "description": keyword,
+                "severity": "medium",
+            }
+            for index, keyword in enumerate(missing, start=1)
+        ],
+        "recommendations": [
+            f"Add or strengthen keyword: {keyword}"
+            for keyword in missing
+        ],
     }
 
 
-@app.post("/generate-resume-docx")
-def generate_resume_docx(data: ResumeRequest):
+@app.post("/api/resume/optimize")
+def resume_optimize(data: ResumeOptimizeRequest):
     """
-    Generate a DOCX file version of the resume.
-
-    Flow:
-    1. Generate structured resume content
-    2. Pass structured content into DOCX export service
-    3. Return downloadable file
+    Optimize raw resume text against the target job description for the React frontend.
     """
-    resume_data = generate_resume_content(data)
-    file_path = create_resume_docx(resume_data, data.template)
+    job_description = data.jobDescription or ""
 
-    return FileResponse(
-        path=file_path,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        filename="resume.docx",
-    )
-
-
-@app.post("/generate-resume-pdf")
-def generate_resume_pdf(data: ResumeRequest):
-    """
-    Generate a PDF file version of the resume.
-
-    Flow:
-    1. Generate structured resume content
-    2. Pass structured content into PDF export service
-    3. Return downloadable file
-    """
-    resume_data = generate_resume_content(data)
-    file_path = create_resume_pdf(resume_data, data.template)
-
-    return FileResponse(
-        path=file_path,
-        media_type="application/pdf",
-        filename="resume.pdf",
-    )
-
-
-# =========================================================
-# ATS Analysis Routes
-# =========================================================
-
-@app.post("/ats-score")
-def ats_score(data: ResumeRequest):
-    """
-    Generate the resume preview and calculate ATS alignment.
-
-    This is one of the most important frontend routes because it powers:
-    - resume preview
-    - ATS score
-    - matched keywords
-    - missing keywords
-    """
-    resume = generate_resume_content(data)
-    ats = calculate_ats_score(resume, data.job_description)
-
-    return {
-        "resume": resume,
-        "ats_analysis": ats,
+    original_resume_data = {
+        "full_name": "",
+        "email": "",
+        "phone": "",
+        "location": "",
+        "professional_summary": data.resumeText,
+        "skills": [],
+        "professional_experience": [],
+        "education": [],
+        "certifications": [],
     }
 
+    original_ats = calculate_ats_score(original_resume_data, job_description)
 
-# =========================================================
-# Resume Optimization Routes
-# =========================================================
-
-@app.post("/optimize-resume")
-def optimize_resume(data: ResumeRequest):
-    """
-    Optimize the generated resume against the target job description.
-
-    Flow:
-    1. Generate the initial structured resume
-    2. Calculate the initial ATS score
-    3. Optimize the resume using missing keywords and JD alignment
-    4. Recalculate ATS on the improved resume
-    5. Safety check:
-       If the optimized version somehow scores worse, keep the original
-
-    This route powers:
-    - score improvement panel
-    - before/after comparison
-    - rewrite explanations
-    - advanced ATS insights
-    """
-    initial_resume = generate_resume_content(data)
-    initial_ats = calculate_ats_score(initial_resume, data.job_description)
-
-    improved_resume = optimize_resume_content(
-        initial_resume,
-        data.job_description,
-        initial_ats["missing_keywords"],
-    )
-    improved_ats = calculate_ats_score(improved_resume, data.job_description)
-
-    # Defensive fallback:
-    # Never return a worse optimized version than the original.
-    if improved_ats["ats_score"] < initial_ats["ats_score"]:
-        improved_resume = initial_resume
-        improved_ats = initial_ats
-
-    return {
-        "original_resume": initial_resume,
-        "original_ats_analysis": initial_ats,
-        "improved_resume": improved_resume,
-        "improved_ats_analysis": improved_ats,
-    }
-
-
-# =========================================================
-# Cover Letter Routes
-# =========================================================
-
-@app.post("/generate-cover-letter")
-def generate_cover_letter(data: ResumeRequest):
-    """
-    Generate a targeted cover letter based on user input and job description.
-    """
-    cover_letter = generate_cover_letter_content(data)
-
-    return {
-        "message": "Cover letter generated",
-        "cover_letter": cover_letter,
-    }
-
-
-@app.post("/generate-cover-letter-docx")
-def generate_cover_letter_docx(data: ResumeRequest):
-    """
-    Generate a DOCX export of the cover letter.
-    """
-    cover_letter = generate_cover_letter_content(data)
-    file_path = create_cover_letter_docx(data.name, cover_letter)
-
-    return FileResponse(
-        path=file_path,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        filename="cover_letter.docx",
+    # Call a text-based optimizer instead of forcing structured JSON behavior
+    optimized_resume_text = optimize_resume_text(
+        data.resumeText,
+        job_description,
+        original_ats.get("missing_keywords", []),
     )
 
+    if not optimized_resume_text or not optimized_resume_text.strip():
+        optimized_resume_text = data.resumeText
 
-# =========================================================
-# Stripe Payment Routes
-# =========================================================
+    improved_resume_data = {
+        "full_name": "",
+        "email": "",
+        "phone": "",
+        "location": "",
+        "professional_summary": optimized_resume_text,
+        "skills": [],
+        "professional_experience": [],
+        "education": [],
+        "certifications": [],
+    }
 
-@app.post("/create-checkout-session")
-async def create_checkout_session():
-    """
-    Create a Stripe Checkout session for the Pro package.
+    improved_ats = calculate_ats_score(improved_resume_data, job_description)
 
-    Current MVP behavior:
-    - Stripe redirects to success.html after payment
-    - success.html sets Pro access in localStorage on the frontend
+    if improved_ats.get("ats_score", 0) < original_ats.get("ats_score", 0):
+        optimized_resume_text = data.resumeText
+        improved_ats = original_ats
 
-    Important:
-    - success_url and cancel_url are currently set for local development
-    - update them for production deployment
-    """
-    try:
-        if not stripe.api_key:
-            return JSONResponse(
-                {"error": "Missing STRIPE_SECRET_KEY environment variable."},
-                status_code=500,
-            )
-
-        session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            mode="payment",
-            line_items=[
-                {
-                    "price_data": {
-                        "currency": "usd",
-                        "product_data": {
-                            "name": "AI Resume Studio Pro Package",
-                        },
-                        "unit_amount": 2900,  # $29.00 USD
-                    },
-                    "quantity": 1,
-                }
-            ],
-            success_url="http://localhost:5500/success.html",
-            cancel_url="http://localhost:5500/index.html",
-        )
-
-        return JSONResponse({"url": session.url})
-
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+    return {
+        "originalScore": original_ats.get("ats_score", 0),
+        "optimizedScore": improved_ats.get("ats_score", 0),
+        "scoreImprovement": improved_ats.get("ats_score", 0) - original_ats.get("ats_score", 0),
+        "originalResumeText": data.resumeText,
+        "optimizedResumeText": optimized_resume_text,
+        "missingKeywordsBefore": original_ats.get("missing_keywords", []),
+        "missingKeywordsAfter": improved_ats.get("missing_keywords", []),
+    }
