@@ -8,6 +8,7 @@
 # - normalize heading aliases into one canonical schema
 # - extract basic identity/contact information
 # - return a frontend/backend-friendly structured resume object
+# - handle plain-text resumes that do not use bullet symbols
 # =========================================================
 
 import re
@@ -48,6 +49,16 @@ SECTION_ALIASES = {
     ],
 }
 
+ACTION_LINE_STARTERS = {
+    "led", "managed", "developed", "implemented", "coordinated",
+    "improved", "oversaw", "built", "created", "delivered",
+    "designed", "presented", "analyzed", "supported", "established",
+    "launched", "reduced", "increased", "monitored", "executed",
+    "directed", "drove", "drive", "manage", "lead", "oversee",
+    "partnered", "facilitated", "maintained", "tracked", "prepared",
+    "supervised", "owned", "administered",
+}
+
 
 def normalize_heading(text: str) -> str:
     return re.sub(r"[^a-z ]", "", text.lower()).strip()
@@ -82,6 +93,33 @@ def is_bullet(text: str) -> bool:
 
 def strip_bullet(text: str) -> str:
     return re.sub(r"^[•\-]\s*", "", text).strip()
+
+
+def looks_like_action_line(text: str) -> bool:
+    cleaned = str(text).strip()
+    if not cleaned:
+        return False
+
+    cleaned = cleaned.lstrip("•-–— ").strip()
+    if not cleaned:
+        return False
+
+    first_word = cleaned.split()[0].lower()
+    first_word = re.sub(r"[^a-zA-Z\-]", "", first_word)
+
+    return first_word in ACTION_LINE_STARTERS
+
+
+def looks_like_company_title_inline(text: str) -> bool:
+    return " — " in text or " – " in text or " - " in text
+
+
+def split_company_title_inline(text: str) -> tuple[str, str]:
+    for sep in (" — ", " – ", " - "):
+        if sep in text:
+            parts = text.split(sep, 1)
+            return parts[0].strip(), parts[1].strip()
+    return text.strip(), ""
 
 
 def parse_resume_text(resume_text: str) -> Dict:
@@ -151,14 +189,12 @@ def parse_resume_text(resume_text: str) -> Dict:
             continue
 
         if current_section == "skills":
-            if not is_bullet(line):
-                structured["skills"].append(line)
-            else:
-                structured["skills"].append(strip_bullet(line))
+            structured["skills"].append(strip_bullet(line) if is_bullet(line) else line)
             index += 1
             continue
 
         if current_section == "experience":
+            # Bullet line
             if is_bullet(line):
                 if current_experience is None:
                     current_experience = {
@@ -174,7 +210,23 @@ def parse_resume_text(resume_text: str) -> Dict:
                 index += 1
                 continue
 
-            # Start of a new role block
+            # Plain action line without bullet symbol
+            if looks_like_action_line(line):
+                if current_experience is None:
+                    current_experience = {
+                        "company": "",
+                        "title": "",
+                        "startDate": None,
+                        "endDate": None,
+                        "location": None,
+                        "bullets": [],
+                    }
+
+                current_experience["bullets"].append(line)
+                index += 1
+                continue
+
+            # If we hit a new company/title block, close the previous role
             if current_experience and (
                 current_experience["company"]
                 or current_experience["title"]
@@ -188,10 +240,31 @@ def parse_resume_text(resume_text: str) -> Dict:
             start_date = None
             end_date = None
 
+            # Inline company/title case
+            if looks_like_company_title_inline(line):
+                company, title = split_company_title_inline(line)
+                current_experience = {
+                    "company": company,
+                    "title": title,
+                    "startDate": None,
+                    "endDate": None,
+                    "location": None,
+                    "bullets": [],
+                }
+                index += 1
+                continue
+
             next_line = lines[index + 1] if index + 1 < len(lines) else None
             next_next_line = lines[index + 2] if index + 2 < len(lines) else None
 
-            if next_line and detect_section_key(next_line) is None and not is_bullet(next_line):
+            # Standard company then title layout
+            if (
+                next_line
+                and detect_section_key(next_line) is None
+                and not is_bullet(next_line)
+                and not looks_like_action_line(next_line)
+                and not looks_like_date_range(next_line)
+            ):
                 title = next_line
 
             if next_next_line and looks_like_date_range(next_next_line):
@@ -228,7 +301,12 @@ def parse_resume_text(resume_text: str) -> Dict:
             degree = None
 
             next_line = lines[index + 1] if index + 1 < len(lines) else None
-            if next_line and detect_section_key(next_line) is None and not is_bullet(next_line):
+            if (
+                next_line
+                and detect_section_key(next_line) is None
+                and not is_bullet(next_line)
+                and not looks_like_action_line(next_line)
+            ):
                 degree = next_line
 
             structured["education"].append(
