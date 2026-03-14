@@ -2,17 +2,6 @@
 # File: main.py
 # Purpose:
 # FastAPI backend entry point for the current AI Resume Platform frontend.
-#
-# Responsibilities:
-# - expose scan and optimize API routes for the React frontend
-# - validate frontend payloads
-# - orchestrate ATS scoring and resume optimization
-# - return clean JSON responses used by the UI
-#
-# Notes:
-# - legacy MVP routes were removed to keep this backend focused
-# - heavy AI/business logic stays in service files
-# - this file should remain routing/orchestration only
 # =========================================================
 
 import os
@@ -37,33 +26,30 @@ app = FastAPI(
     version="2.0.0",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+origins_env = os.getenv("ALLOWED_ORIGINS", "")
+allowed_origins = [origin.strip() for origin in origins_env.split(",") if origin.strip()]
+
+if not allowed_origins:
+    allowed_origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-    ],
+        "https://ai-resume-platform-frontend.onrender.com",
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.options("/{rest_of_path:path}")
-async def options_handler(rest_of_path: str):
-    return {"status": "ok"}
 
 # =========================================================
 # Helpers
 # =========================================================
 
 def build_resume_data_from_text(resume_text: str) -> dict:
-    """
-    Convert raw resume text from the frontend into the minimal structured shape
-    expected by the current ATS and optimization services.
-
-    Current frontend sends raw text only, so we store it inside the
-    professional_summary field as the source text payload.
-    """
     return {
         "full_name": "",
         "email": "",
@@ -78,12 +64,6 @@ def build_resume_data_from_text(resume_text: str) -> dict:
 
 
 def resume_data_to_text(resume_data: dict) -> str:
-    """
-    Flatten structured resume JSON into preview text for the frontend.
-
-    This is used after optimization so the UI can render a readable full resume
-    preview when the optimizer returns structured JSON.
-    """
     if not isinstance(resume_data, dict):
         return ""
 
@@ -145,58 +125,6 @@ def resume_data_to_text(resume_data: dict) -> str:
     return "\n".join(line for line in parts if line is not None).strip()
 
 
-# =========================================================
-# Health Check
-# =========================================================
-
-@app.get("/")
-def root():
-    """
-    Basic health check route used to confirm the backend is running.
-    """
-    return {"message": "AI Resume Platform backend is running"}
-
-
-# =========================================================
-# Frontend API Routes
-# =========================================================
-
-@app.post("/api/resume/scan")
-def resume_scan(data: ResumeScanRequest):
-    """
-    Scan raw resume text and return ATS analysis for the React frontend.
-    """
-    job_description = data.jobDescription or ""
-
-    ats = calculate_ats_score(data.resumeText, job_description)
-    matched = ats.get("matched_keywords", [])
-    missing = ats.get("missing_keywords", [])
-    category_scores = ats.get("category_scores", [])
-    parsed_resume = ats.get("parsed_resume", {})
-
-    return {
-        "overallScore": ats.get("ats_score", 0),
-        "summary": "Resume scan completed successfully.",
-        "previewText": data.resumeText,
-        "parsedResume": parsed_resume,
-        "matchedKeywords": matched,
-        "missingKeywords": missing,
-        "categoryScores": category_scores,
-        "issues": [
-            {
-                "id": f"missing-keyword-{index}",
-                "title": "Missing Keyword",
-                "description": keyword,
-                "severity": "medium",
-            }
-            for index, keyword in enumerate(missing, start=1)
-        ],
-        "recommendations": [
-            f"Add or strengthen keyword: {keyword}"
-            for keyword in missing
-        ],
-    }
-
 def build_optimization_guidance(resume_text: str) -> dict:
     lowered = resume_text.lower()
 
@@ -249,6 +177,59 @@ def build_optimization_guidance(resume_text: str) -> dict:
         ],
     }
 
+
+# =========================================================
+# Health Check
+# =========================================================
+
+@app.get("/")
+def root():
+    return {"message": "AI Resume Platform backend is running"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+# =========================================================
+# Frontend API Routes
+# =========================================================
+
+@app.post("/api/resume/scan")
+def resume_scan(data: ResumeScanRequest):
+    job_description = data.jobDescription or ""
+
+    ats = calculate_ats_score(data.resumeText, job_description)
+    matched = ats.get("matched_keywords", [])
+    missing = ats.get("missing_keywords", [])
+    category_scores = ats.get("category_scores", [])
+    parsed_resume = ats.get("parsed_resume", {})
+
+    return {
+        "overallScore": ats.get("ats_score", 0),
+        "summary": "Resume scan completed successfully.",
+        "previewText": data.resumeText,
+        "parsedResume": parsed_resume,
+        "matchedKeywords": matched,
+        "missingKeywords": missing,
+        "categoryScores": category_scores,
+        "issues": [
+            {
+                "id": f"missing-keyword-{index}",
+                "title": "Missing Keyword",
+                "description": keyword,
+                "severity": "medium",
+            }
+            for index, keyword in enumerate(missing, start=1)
+        ],
+        "recommendations": [
+            f"Add or strengthen keyword: {keyword}"
+            for keyword in missing
+        ],
+    }
+
+
 @app.post("/api/resume/optimize")
 def resume_optimize(data: ResumeOptimizeRequest):
     job_description = data.jobDescription or ""
@@ -287,16 +268,15 @@ def resume_optimize(data: ResumeOptimizeRequest):
         reverted_to_original = True
 
     final_score = improved_ats.get("ats_score", 0)
-    original_score = original_ats.get("ats_score", 0)
 
     optimization_guidance = None
     if reverted_to_original or final_score == original_score:
         optimization_guidance = build_optimization_guidance(data.resumeText)
 
     return {
-        "originalScore": original_ats.get("ats_score", 0),
-        "optimizedScore": improved_ats.get("ats_score", 0),
-        "scoreImprovement": improved_ats.get("ats_score", 0) - original_ats.get("ats_score", 0),
+        "originalScore": original_score,
+        "optimizedScore": final_score,
+        "scoreImprovement": final_score - original_score,
         "originalResumeText": data.resumeText,
         "optimizedResumeText": optimized_resume_text,
         "originalParsedResume": original_ats.get("parsed_resume", {}),
