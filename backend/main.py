@@ -205,6 +205,7 @@ def resume_scan(data: ResumeScanRequest):
     missing = ats.get("missing_keywords", [])
     category_scores = ats.get("category_scores", [])
     parsed_resume = ats.get("parsed_resume", {})
+    match_intelligence = ats.get("match_intelligence", {})
 
     return {
         "overallScore": ats.get("ats_score", 0),

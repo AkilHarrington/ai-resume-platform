@@ -9,6 +9,7 @@
 import re
 
 from services.resume_parser import parse_resume_text
+from services.match_intelligence import build_match_intelligence
 
 
 STOPWORDS = {
@@ -588,6 +589,13 @@ def calculate_ats_score(resume_input, job_description: str) -> dict:
         + leadership_score
         + completeness_score
         + industry_score,
+    )
+
+    match_intelligence = build_match_intelligence(
+        parsed_resume=resume_data,
+        job_description=job_description,
+        resume_industry=resume_industry,
+        job_industry=job_industry,
     )
 
     return {
