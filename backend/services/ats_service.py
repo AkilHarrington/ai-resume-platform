@@ -224,6 +224,16 @@ ACTION_TERMS = {
     "analyze", "support", "improve", "oversee",
 }
 
+ACTION_LINE_STARTERS = {
+    "led", "managed", "developed", "implemented", "coordinated",
+    "improved", "oversaw", "built", "created", "delivered",
+    "designed", "presented", "analyzed", "supported", "established",
+    "launched", "reduced", "increased", "monitored", "executed",
+    "directed", "drove", "drive", "managed", "manage", "lead",
+    "led", "oversee", "oversaw", "partnered", "facilitated",
+    "maintained", "tracked", "prepared", "supervised",
+}
+
 
 def normalize_word(word: str) -> str:
     word = word.lower().strip()
@@ -448,6 +458,25 @@ def score_keyword_alignment(
     return weighted_score, matched_normalized, missing_normalized
 
 
+def is_action_line(text: str) -> bool:
+    cleaned = str(text).strip()
+    if not cleaned:
+        return False
+
+    cleaned = cleaned.lstrip("•-–— ").strip()
+    if not cleaned:
+        return False
+
+    first_word = cleaned.split()[0].lower()
+    first_word = re.sub(r"[^a-zA-Z\-]", "", first_word)
+
+    if first_word in ACTION_LINE_STARTERS:
+        return True
+
+    lowered = cleaned.lower()
+    return any(term in lowered for term in ACTION_TERMS)
+
+
 def score_experience_strength(resume_data: dict) -> int:
     roles = resume_data.get("professional_experience", [])
     if not roles:
@@ -457,15 +486,30 @@ def score_experience_strength(resume_data: dict) -> int:
     action_bullet_count = 0
 
     for role in roles:
-        for bullet in role.get("description", []):
+        descriptions = role.get("description", []) or []
+
+        # Robust fallback for flattened parser output that merged lines with em dashes
+        expanded_descriptions: list[str] = []
+        for item in descriptions:
+            text = str(item).strip()
+            if not text:
+                continue
+
+            split_parts = [
+                part.strip()
+                for part in re.split(r"\s+[—–-]\s+", text)
+                if part.strip()
+            ]
+            expanded_descriptions.extend(split_parts if split_parts else [text])
+
+        for bullet in expanded_descriptions:
             text = str(bullet).strip()
             if not text:
                 continue
 
             bullet_count += 1
-            lowered = text.lower()
 
-            if any(term in lowered for term in ACTION_TERMS):
+            if is_action_line(text):
                 action_bullet_count += 1
 
     if bullet_count == 0:
