@@ -1,6 +1,7 @@
 import { ScoreRing } from '../../components/ScoreRing'
 import { KeywordPill } from '../../components/KeywordPill'
 import { LoadingCard, EmptyState } from './shared'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import type { ScanResult } from '../../api/resumeApi'
 
 interface Props {
@@ -12,6 +13,8 @@ interface Props {
 }
 
 export function ScanTab({ result, isLoading, hasResume, isPro, error }: Props) {
+  const isMobile = useIsMobile()
+
   if (isLoading) return <LoadingCard message="Claude is evaluating your resume against the job description..." />
   if (!result) return (
     <>
@@ -30,17 +33,17 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error }: Props) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'fadeIn 0.3s ease' }}>
 
       {/* Score Card */}
-      <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 28, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
-          <ScoreRing score={result.overallScore} size={110} />
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-              <h2 style={{ fontSize: 22, fontWeight: 800, color: 'var(--navy)' }}>ATS Compatibility Report</h2>
+      <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: isMobile ? 20 : 28, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 16 : 32, flexWrap: 'wrap' }}>
+          <ScoreRing score={result.overallScore} size={isMobile ? 80 : 110} />
+          <div style={{ flex: 1, minWidth: 160 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+              <h2 style={{ fontSize: isMobile ? 17 : 22, fontWeight: 800, color: 'var(--navy)' }}>ATS Compatibility Report</h2>
               {result.semantic && (
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'white', background: 'var(--emerald)', borderRadius: 999, padding: '2px 8px' }}>AI Scored</span>
               )}
             </div>
-            <p style={{ fontSize: 14, color: 'var(--gray-500)', lineHeight: 1.6 }}>
+            <p style={{ fontSize: isMobile ? 13 : 14, color: 'var(--gray-500)', lineHeight: 1.6 }}>
               {result.overallScore >= 75
                 ? 'Strong compatibility. Your resume is likely to pass automated screening.'
                 : result.overallScore >= 55
@@ -71,7 +74,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error }: Props) {
 
       {/* Score Breakdown */}
       {result.categoryScores?.length > 0 && (
-        <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
+        <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: isMobile ? 16 : 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)', marginBottom: 18 }}>Score Breakdown</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             {result.categoryScores.map(cat => {
@@ -101,7 +104,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error }: Props) {
 
       {/* Strengths & Gaps — Pro only */}
       {(result.strengths?.length > 0 || result.gaps?.length > 0) && isPro && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
           {result.strengths?.length > 0 && (
             <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--success)', marginBottom: 12 }}>✓ Strengths</h3>
@@ -130,6 +133,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error }: Props) {
           )}
         </div>
       )}
+
       {(result.strengths?.length > 0 || result.gaps?.length > 0) && !isPro && (
         <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)', textAlign: 'center' }}>
           <div style={{ fontSize: 28, marginBottom: 8 }}>🔒</div>
@@ -147,7 +151,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error }: Props) {
       )}
 
       {/* Matched / Missing Skills */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
         <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--success)', marginBottom: 14 }}>
             ✓ Matched Skills ({result.matchedKeywords.length})

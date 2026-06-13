@@ -5,6 +5,7 @@ import { Logo } from '../components/Logo'
 import { Button } from '../components/Button'
 import { createCheckoutSession } from '../api/resumeApi'
 import { useAuth } from '../app/AuthContext'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 const features = [
   { label: 'ATS scan & score', free: true, pro: true },
@@ -22,6 +23,7 @@ const features = [
 export function PricingPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const isMobile = useIsMobile()
   const [billing, setBilling] = useState<'monthly' | 'onetime'>('monthly')
 
   const checkoutMutation = useMutation({
@@ -32,11 +34,13 @@ export function PricingPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--gray-50)', fontFamily: 'var(--font-sans)' }}>
+
       {/* Nav */}
       <nav style={{
         background: 'white', borderBottom: '1px solid var(--gray-100)',
-        padding: '0 40px', display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', height: 64,
+        padding: isMobile ? '0 16px' : '0 40px',
+        display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', height: 60,
       }}>
         <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
           <Logo size="sm" />
@@ -44,12 +48,12 @@ export function PricingPage() {
         <Button variant="ghost" size="sm" onClick={() => navigate('/workspace')}>Back to App</Button>
       </nav>
 
-      <div style={{ maxWidth: 880, margin: '0 auto', padding: '80px 24px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <h1 style={{ fontSize: 40, fontWeight: 900, color: 'var(--navy)', letterSpacing: '-0.03em', marginBottom: 12 }}>
+      <div style={{ maxWidth: 880, margin: '0 auto', padding: isMobile ? '40px 16px' : '80px 24px' }}>
+        <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 48 }}>
+          <h1 style={{ fontSize: isMobile ? 28 : 40, fontWeight: 900, color: 'var(--navy)', letterSpacing: '-0.03em', marginBottom: 12 }}>
             Simple, transparent pricing
           </h1>
-          <p style={{ color: 'var(--gray-500)', fontSize: 16 }}>
+          <p style={{ color: 'var(--gray-500)', fontSize: 15 }}>
             Start free. Upgrade when you're ready to land the interview.
           </p>
 
@@ -57,31 +61,35 @@ export function PricingPage() {
           <div style={{ display: 'inline-flex', background: 'white', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-lg)', padding: 4, gap: 4, marginTop: 24 }}>
             {(['monthly', 'onetime'] as const).map(b => (
               <button key={b} onClick={() => setBilling(b)} style={{
-                padding: '8px 20px', borderRadius: 'var(--radius)', fontSize: 14, fontWeight: 600, border: 'none', cursor: 'pointer',
+                padding: '8px 16px', borderRadius: 'var(--radius)', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
                 background: billing === b ? 'var(--navy)' : 'transparent',
                 color: billing === b ? 'white' : 'var(--gray-500)',
                 transition: 'all var(--transition)',
               }}>
                 {b === 'monthly' ? 'Monthly' : 'One-Time'}
-                {b === 'onetime' && <span style={{ marginLeft: 6, fontSize: 11, background: 'var(--emerald)', color: 'white', padding: '2px 6px', borderRadius: 999 }}>BEST VALUE</span>}
+                {b === 'onetime' && <span style={{ marginLeft: 6, fontSize: 10, background: 'var(--emerald)', color: 'white', padding: '2px 6px', borderRadius: 999 }}>BEST VALUE</span>}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Plans Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 48 }}>
+        {/* Plans Grid — stacks on mobile */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+          gap: 24, marginBottom: 48,
+        }}>
           {/* Free */}
-          <div style={{ background: 'white', borderRadius: 'var(--radius-xl)', padding: '36px 32px', border: '2px solid var(--gray-100)', boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ background: 'white', borderRadius: 'var(--radius-xl)', padding: isMobile ? '28px 24px' : '36px 32px', border: '2px solid var(--gray-100)', boxShadow: 'var(--shadow-sm)' }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Free</div>
             <div style={{ fontSize: 48, fontWeight: 900, color: 'var(--navy)', lineHeight: 1, marginBottom: 6 }}>$0</div>
-            <div style={{ fontSize: 14, color: 'var(--gray-400)', marginBottom: 28 }}>forever</div>
-            <Button fullWidth variant="outline" onClick={() => navigate(user ? '/workspace' : '/signup')} style={{ marginBottom: 28, borderColor: 'var(--navy)', color: 'var(--navy)' }}>
+            <div style={{ fontSize: 14, color: 'var(--gray-400)', marginBottom: 24 }}>forever</div>
+            <Button fullWidth variant="outline" onClick={() => navigate(user ? '/workspace' : '/signup')} style={{ marginBottom: 24, borderColor: 'var(--navy)', color: 'var(--navy)' }}>
               Start Free Scan
             </Button>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {features.map(f => (
-                <div key={f.label} style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: f.free ? 1 : 0.3 }}>
+                <div key={f.label} style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: f.free ? 1 : 0.35 }}>
                   <span style={{ color: f.free ? 'var(--success)' : 'var(--gray-300)', fontWeight: 700, flexShrink: 0 }}>{f.free ? '✓' : '✗'}</span>
                   <span style={{ fontSize: 14, color: 'var(--charcoal)' }}>{f.label}</span>
                 </div>
@@ -90,7 +98,7 @@ export function PricingPage() {
           </div>
 
           {/* Pro */}
-          <div style={{ background: 'var(--navy)', borderRadius: 'var(--radius-xl)', padding: '36px 32px', border: '2px solid var(--emerald)', boxShadow: 'var(--shadow-xl)', position: 'relative' }}>
+          <div style={{ background: 'var(--navy)', borderRadius: 'var(--radius-xl)', padding: isMobile ? '28px 24px' : '36px 32px', border: '2px solid var(--emerald)', boxShadow: 'var(--shadow-xl)', position: 'relative' }}>
             <div style={{
               position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)',
               background: 'var(--emerald)', color: 'white', fontSize: 12, fontWeight: 700,
@@ -105,13 +113,13 @@ export function PricingPage() {
                 {billing === 'monthly' ? '/month' : ' one-time'}
               </span>
             </div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 28 }}>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 24 }}>
               {billing === 'monthly' ? 'Cancel anytime' : 'Lifetime Pro access'}
             </div>
             <Button
               fullWidth variant="primary" loading={checkoutMutation.isPending}
               onClick={() => checkoutMutation.mutate()}
-              style={{ marginBottom: 28, fontSize: 15, padding: '12px 0' }}
+              style={{ marginBottom: 24, fontSize: 15, padding: '12px 0' }}
             >
               {billing === 'monthly' ? 'Start Pro — $19/mo' : 'Get Lifetime Pro — $49'}
             </Button>
@@ -127,8 +135,8 @@ export function PricingPage() {
         </div>
 
         {/* FAQ */}
-        <div style={{ background: 'white', borderRadius: 'var(--radius-xl)', padding: '40px 32px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
-          <h2 style={{ fontSize: 22, fontWeight: 800, color: 'var(--navy)', marginBottom: 28 }}>Common questions</h2>
+        <div style={{ background: 'white', borderRadius: 'var(--radius-xl)', padding: isMobile ? '28px 20px' : '40px 32px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
+          <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--navy)', marginBottom: 24 }}>Common questions</h2>
           {[
             { q: 'What\'s the difference between monthly and one-time?', a: 'Monthly gives you full access for $19/month, cancel anytime. One-time is a single $49 payment for lifetime Pro access — no recurring charges.' },
             { q: 'Does the free plan require a credit card?', a: 'No credit card required. You\'ll need a free account to get started — sign up takes less than 30 seconds.' },
