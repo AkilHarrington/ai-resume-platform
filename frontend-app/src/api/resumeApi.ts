@@ -48,7 +48,8 @@ export interface CategoryScore {
 }
 
 export interface ScanResult {
-  overallScore: number
+  overallScore: number | null
+  noJd?: boolean
   matchedKeywords: string[]
   missingKeywords: string[]
   categoryScores: CategoryScore[]
@@ -121,6 +122,86 @@ export async function optimizeLinkedIn(params: {
 }): Promise<{ headline: string; summary: string }> {
   const { data } = await api.post<{ headline: string; summary: string }>('/api/linkedin/optimize', params)
   return data
+}
+
+// ─── Shared SSE reader ────────────────────────────────────────────────────────
+
+async function readSSEStream(
+  url: string,
+  body: Record<string, unknown>,
+  onChunk: (chunk: string) => void,
+  onDone: () => void,
+  onError: (msg: string) => void,
+): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession()
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}${url}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    onError('Could not reach the server. Check your connection and try again.')
+    return
+  }
+
+  if (!response.ok) {
+    const detail = await response.json().catch(() => ({ detail: 'Request failed' }))
+    if (response.status === 401) { onError('Session expired. Please sign in again.'); return }
+    if (response.status === 403) { onError('This feature requires a Pro plan.'); return }
+    if (response.status === 429) { onError('Too many requests. Please wait a moment and try again.'); return }
+    onError(detail.detail || 'Request failed')
+    return
+  }
+
+  if (!response.body) {
+    onError('Server returned a response with no body. Please try again.')
+    return
+  }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const payload = line.slice(6)
+      if (payload === '[DONE]') { onDone(); return }
+      try {
+        const parsed = JSON.parse(payload)
+        if (parsed.error) { onError(parsed.error); return }
+        if (parsed.chunk) onChunk(parsed.chunk)
+      } catch { /* skip malformed lines */ }
+    }
+  }
+  onDone()
+}
+
+export function streamCoverLetter(
+  params: { resumeText: string; jobDescription?: string; companyName?: string; candidateName?: string },
+  onChunk: (chunk: string) => void,
+  onDone: () => void,
+  onError: (msg: string) => void,
+): Promise<void> {
+  return readSSEStream('/api/cover-letter/stream', params, onChunk, onDone, onError)
+}
+
+export function streamLinkedIn(
+  params: { resumeText: string; jobDescription?: string; targetRole?: string },
+  onChunk: (chunk: string) => void,
+  onDone: () => void,
+  onError: (msg: string) => void,
+): Promise<void> {
+  return readSSEStream('/api/linkedin/stream', params, onChunk, onDone, onError)
 }
 
 export async function createCheckoutSession(plan: 'monthly' | 'onetime'): Promise<{ url: string }> {

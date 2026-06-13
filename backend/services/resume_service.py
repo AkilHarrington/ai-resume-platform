@@ -4,6 +4,7 @@
 # Claude-powered resume optimization for the AI Resume Studio platform.
 # =========================================================
 
+import logging
 import os
 
 import anthropic
@@ -11,16 +12,27 @@ import anthropic
 from services.exceptions import AIUnavailableError
 
 
+logger = logging.getLogger("ai_resume_studio.resume_service")
+
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
 
+# =========================================================
+# Singleton client — instantiated once, reused across requests
+# =========================================================
 
-def get_anthropic_client() -> anthropic.Anthropic:
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY is missing. Set it in your environment or .env file."
-        )
-    return anthropic.Anthropic(api_key=api_key)
+_client: anthropic.Anthropic | None = None
+
+
+def _get_client() -> anthropic.Anthropic:
+    global _client
+    if _client is None:
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY is missing. Set it in your environment or .env file."
+            )
+        _client = anthropic.Anthropic(api_key=api_key)
+    return _client
 
 
 BANNED_PHRASES = [
@@ -40,15 +52,8 @@ def build_resume_optimization_prompt(
     missing_keywords: list[str],
     original_score: int = 0,
 ) -> str:
-    if original_score < 60:
-        keyword_limit = 3
-    elif original_score < 75:
-        keyword_limit = 5
-    else:
-        keyword_limit = 8
-
-    limited_keywords = missing_keywords[:keyword_limit]
     banned_list = ", ".join(f'"{p}"' for p in BANNED_PHRASES)
+    keywords_list = ", ".join(f'"{k}"' for k in missing_keywords) if missing_keywords else "none identified"
 
     return f"""You are an expert resume writer hired by a human — not an AI content generator.
 
@@ -57,10 +62,14 @@ The final output must sound like it was written by a sharp, articulate human pro
 
 ═══ ABSOLUTE RULES ═══
 - Return the FULL optimized resume text ONLY — no JSON, no markdown fences, no explanations
-- Never invent employers, job titles, degrees, certifications, or skills the candidate does not have
+- Never invent employers, job titles, degrees, certifications, or metrics the candidate does not have
 - Never delete existing sections or reduce the candidate's seniority level
 - Preserve the overall structure and section order of the original resume
-- The output must be at least 80% the length of the original
+- The output must be at least 90% the length of the original
+- NAMED TOOLS ARE NEVER INFERRED: Never add any specific named software, platform, or tool — Google Analytics,
+  Salesforce, Lucid, Kantar, Tableau, HubSpot, Asana, or any other — unless that exact name already appears in the
+  original resume. Do not reason "they probably used it." Do not add it to Skills. Do not mention it in a bullet.
+  If the tool name is not in the source text, it does not exist for this candidate. This rule has no exceptions.
 
 ═══ VOICE & TONE ═══
 - Match the writing style and vocabulary level already present in the resume
@@ -72,26 +81,68 @@ The final output must sound like it was written by a sharp, articulate human pro
 - Strengthen weak, vague bullets by making them specific and outcome-focused
 - If a bullet says "Managed projects" — rewrite to show scope, scale, or result
 - Prefer concrete language: numbers, percentages, timeframes, team sizes, dollar amounts
-- If no numbers exist in the original, use relative language: "significantly reduced", "led a team of", "across 3 departments"
-- Do NOT fabricate specific numbers that are not in the original resume
+- If the original has no specific numbers, use relative language that is truthful: "led a team of", "across 3 departments", "within 6 months"
+- Do NOT fabricate specific numbers or metrics that are not in the original resume
+
+═══ SKILLS SECTION AUDIT ═══
+- Read every bullet in the Experience section and identify skills and competencies mentioned there
+- Any skill or competency that appears in experience bullets but is missing from the Skills section should be added
+- TOOL EXCEPTION: Named software/platforms follow the absolute rule above — only add a tool to Skills if it is
+  already named somewhere in the original resume. Do not promote a tool from a bullet you just wrote.
+- Example of correct: original says "managed campaigns in Google Analytics" → add Google Analytics to Skills ✓
+- Example of incorrect: you rewrote a bullet to mention Google Analytics → now add it to Skills ✗ (double fabrication)
+
+═══ SURFACE IMPLICIT COMPETENCIES ═══
+Many candidates undersell themselves by describing WHAT they did without naming the competency.
+Your job is to make the implicit explicit — using only what is honestly evidenced in the original resume.
+
+This section covers COMPETENCY LANGUAGE only — not named tools (see absolute rule above).
+
+- STAKEHOLDER COMMUNICATION: If bullets describe presenting to senior buyers, directing agency partners, leading
+  cross-functional reviews, or reporting to leadership — rewrite to explicitly name "senior stakeholder communication",
+  "executive-level presentations", or "C-suite reporting". Only apply where evidence exists in the original.
+
+- PERFORMANCE REPORTING: If the original resume cites brand awareness %, sales lift %, campaign ROI, or other tracked
+  metrics — the candidate was doing performance tracking. Reframe those bullets using language like "brand health
+  reporting", "performance analytics", or "campaign measurement". The original metrics prove the activity is real.
+
+- CONSUMER/MARKET RESEARCH: If the original describes launch strategy, positioning, segmentation, or audience analysis
+  — surface "consumer insights", "market research", or "audience analysis" explicitly where the evidence supports it.
+
+- NEVER apply these patterns to generate tool names. "They tracked metrics" → can surface "performance reporting" ✓.
+  "They tracked metrics" → cannot surface "Google Analytics" or "Tableau" ✗.
+
+═══ SUMMARY ALIGNMENT ═══
+- The summary is the highest-value ATS section — optimize it first
+- Rewrite the summary so its language closely mirrors the terminology in the job description
+- Do not change what the candidate claims — only restate existing experience using the JD's phrasing
+- Example: if the JD says "brand strategy" and the summary says "building consumer brands", rewrite to use "brand strategy"
+- The summary must still sound human and specific — not a keyword list
 
 ═══ KEYWORD INTEGRATION ═══
-- Integrate these missing keywords ONLY where they are genuinely truthful: {limited_keywords}
-- Keywords must flow naturally within sentences — never list keywords or stuff them artificially
-- If a keyword cannot be integrated honestly, skip it entirely
-- Keyword stuffing is worse than not including the keyword at all
+- These keywords are missing from the resume but present in the job description: {keywords_list}
+- FIRST: split the list into two categories before acting on it:
+    A) COMPETENCY keywords (brand strategy, P&L ownership, C-suite communication, consumer insights, etc.)
+       → integrate if the candidate's experience honestly supports it
+    B) NAMED TOOL keywords (Google Analytics, Salesforce, Lucid, Kantar, Tableau, etc.)
+       → skip entirely unless that exact tool name is already in the original resume
+- For category A: integrate naturally in summary, bullets, or skills — wherever it fits best
+- For category B: do not add, do not mention, do not reference — treat as if the keyword does not exist
+- Keywords must flow naturally within sentences — never stuff or list them artificially
+- Prioritize placing category A keywords in: (1) Summary, (2) Skills section, (3) Experience bullets
 
-═══ OPTIMIZATION INTENSITY ═══
-- Current ATS score: {original_score}
-- Score below 60: focus on restructuring weak sections and integrating up to 3 keywords
-- Score 60–74: sharpen achievement bullets and integrate up to 5 keywords naturally
-- Score 75+: polish language and specificity only — minimal keyword changes
+═══ CURRENT ATS SCORE: {original_score} ═══
+- Every resume, regardless of starting score, has room for authentic improvement
+- Do not hold back on legitimate improvements out of excessive caution
+- The goal is the highest possible honest score — not a minimal edit
 
-Resume:
+<resume>
 {resume_text}
+</resume>
 
-Target job description:
+<job_description>
 {job_description}
+</job_description>
 
 Return the complete optimized resume text only. Do not add any commentary before or after."""
 
@@ -109,12 +160,12 @@ def optimize_resume_text(
         original_score=original_score,
     )
 
-    client = get_anthropic_client()
+    client = _get_client()
 
     try:
         response = client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=4096,
+            max_tokens=8192,  # raised from 4096 — long resumes were being truncated mid-section
             messages=[{"role": "user", "content": prompt}],
         )
         text_output = response.content[0].text.strip()
@@ -126,14 +177,22 @@ def optimize_resume_text(
         raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}). Please try again shortly.")
     except anthropic.APIConnectionError:
         raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
-    except Exception:
-        return resume_text
+    except Exception as e:
+        # Unknown error — propagate as AIUnavailableError so the caller gets a visible 503,
+        # NOT a silent return of the original resume disguised as "optimized".
+        logger.error("optimize_resume_text unexpected error: %s: %s", type(e).__name__, e)
+        raise AIUnavailableError("Resume optimization encountered an unexpected error. Please try again.")
 
     if not text_output:
-        return resume_text
+        logger.warning("optimize_resume_text: Claude returned empty response")
+        raise AIUnavailableError("Claude returned an empty response. Please try again.")
 
     if len(text_output) < max(120, int(len(resume_text) * 0.5)):
-        return resume_text
+        logger.warning(
+            "optimize_resume_text: output too short (output=%d chars, input=%d chars)",
+            len(text_output), len(resume_text)
+        )
+        raise AIUnavailableError("The optimized resume was unexpectedly short. Please try again.")
 
     original_sections = {
         line.strip().lower()
@@ -147,12 +206,16 @@ def optimize_resume_text(
     }
 
     if not original_sections.issubset(new_sections):
-        return resume_text
+        logger.warning(
+            "optimize_resume_text: missing sections — expected %s, got %s",
+            original_sections, new_sections
+        )
+        raise AIUnavailableError("The optimized resume is missing sections from the original. Please try again.")
 
     return text_output
 
 
-def generate_cover_letter(
+def _build_cover_letter_prompt(
     resume_text: str,
     job_description: str,
     company_name: str = "",
@@ -160,8 +223,7 @@ def generate_cover_letter(
 ) -> str:
     company_line = f"Company: {company_name}" if company_name else ""
     candidate_line = f"Candidate name: {candidate_name}" if candidate_name else ""
-
-    prompt = f"""You are an expert career coach writing a cover letter for a real human professional.
+    return f"""You are an expert career coach writing a cover letter for a real human professional.
 
 The letter must sound like it was written by the candidate themselves — confident, specific, and human.
 Recruiters read hundreds of AI-generated cover letters daily. This one must not sound like one of them.
@@ -185,51 +247,33 @@ Recruiters read hundreds of AI-generated cover letters daily. This one must not 
 {candidate_line}
 {company_line}
 
-Resume:
+<resume>
 {resume_text}
+</resume>
 
-Job Description:
+<job_description>
 {job_description}
+</job_description>
 
 Write the cover letter now:"""
 
-    client = get_anthropic_client()
 
-    try:
-        response = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.content[0].text.strip()
-    except anthropic.AuthenticationError:
-        raise AIUnavailableError("Invalid Anthropic API key. Check your ANTHROPIC_API_KEY.")
-    except anthropic.RateLimitError:
-        raise AIUnavailableError("Anthropic rate limit reached. Please wait a moment and try again.")
-    except anthropic.APIStatusError as e:
-        raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}). Please try again shortly.")
-    except anthropic.APIConnectionError:
-        raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
-    except Exception:
-        return ""
-
-
-def generate_linkedin_optimization(
+def _build_linkedin_prompt(
     resume_text: str,
     job_description: str = "",
     target_role: str = "",
-) -> dict:
+) -> str:
     target_line = f"Target role: {target_role}" if target_role else ""
-    jd_section = f"\nTarget Job Description:\n{job_description}" if job_description else ""
-
-    prompt = f"""You are a LinkedIn optimization expert and career strategist.
+    jd_section = f"\n<job_description>\n{job_description}\n</job_description>" if job_description else ""
+    return f"""You are a LinkedIn optimization expert and career strategist.
 
 Based on the resume below, generate optimized LinkedIn profile content.
 
 {target_line}
 
-Resume:
+<resume>
 {resume_text}
+</resume>
 {jd_section}
 
 Return your response in this exact format:
@@ -242,30 +286,22 @@ SUMMARY:
 
 Return only the headline and summary in the format above."""
 
-    client = get_anthropic_client()
 
+def generate_cover_letter(
+    resume_text: str,
+    job_description: str,
+    company_name: str = "",
+    candidate_name: str = "",
+) -> str:
+    prompt = _build_cover_letter_prompt(resume_text, job_description, company_name, candidate_name)
+    client = _get_client()
     try:
         response = client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=1024,
+            max_tokens=1500,
             messages=[{"role": "user", "content": prompt}],
         )
-        text = response.content[0].text.strip()
-
-        headline = ""
-        summary = ""
-
-        if "HEADLINE:" in text and "SUMMARY:" in text:
-            parts = text.split("SUMMARY:")
-            headline_part = parts[0].replace("HEADLINE:", "").strip()
-            summary_part = parts[1].strip() if len(parts) > 1 else ""
-            headline = headline_part
-            summary = summary_part
-        else:
-            headline = text[:220]
-            summary = text
-
-        return {"headline": headline, "summary": summary}
+        return response.content[0].text.strip()
     except anthropic.AuthenticationError:
         raise AIUnavailableError("Invalid Anthropic API key. Check your ANTHROPIC_API_KEY.")
     except anthropic.RateLimitError:
@@ -274,5 +310,96 @@ Return only the headline and summary in the format above."""
         raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}). Please try again shortly.")
     except anthropic.APIConnectionError:
         raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
-    except Exception:
-        return {"headline": "", "summary": ""}
+    except Exception as e:
+        logger.error("generate_cover_letter unexpected error: %s: %s", type(e).__name__, e)
+        raise AIUnavailableError("Cover letter generation encountered an unexpected error. Please try again.")
+
+
+def stream_cover_letter(
+    resume_text: str,
+    job_description: str,
+    company_name: str = "",
+    candidate_name: str = "",
+):
+    """Generator: yields raw text chunks from Claude's streaming API."""
+    prompt = _build_cover_letter_prompt(resume_text, job_description, company_name, candidate_name)
+    client = _get_client()
+    try:
+        with client.messages.stream(
+            model=CLAUDE_MODEL,
+            max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}],
+        ) as stream:
+            for text in stream.text_stream:
+                yield text
+    except anthropic.AuthenticationError:
+        raise AIUnavailableError("Invalid Anthropic API key. Check your ANTHROPIC_API_KEY.")
+    except anthropic.RateLimitError:
+        raise AIUnavailableError("Anthropic rate limit reached. Please wait a moment and try again.")
+    except anthropic.APIStatusError as e:
+        raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}). Please try again shortly.")
+    except anthropic.APIConnectionError:
+        raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
+
+
+def generate_linkedin_optimization(
+    resume_text: str,
+    job_description: str = "",
+    target_role: str = "",
+) -> dict:
+    prompt = _build_linkedin_prompt(resume_text, job_description, target_role)
+    client = _get_client()
+    try:
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = response.content[0].text.strip()
+        return _parse_linkedin_text(text)
+    except anthropic.AuthenticationError:
+        raise AIUnavailableError("Invalid Anthropic API key. Check your ANTHROPIC_API_KEY.")
+    except anthropic.RateLimitError:
+        raise AIUnavailableError("Anthropic rate limit reached. Please wait a moment and try again.")
+    except anthropic.APIStatusError as e:
+        raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}). Please try again shortly.")
+    except anthropic.APIConnectionError:
+        raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
+    except Exception as e:
+        logger.error("generate_linkedin_optimization unexpected error: %s: %s", type(e).__name__, e)
+        raise AIUnavailableError("LinkedIn optimization encountered an unexpected error. Please try again.")
+
+
+def stream_linkedin_optimization(
+    resume_text: str,
+    job_description: str = "",
+    target_role: str = "",
+):
+    """Generator: yields raw text chunks from Claude's streaming API."""
+    prompt = _build_linkedin_prompt(resume_text, job_description, target_role)
+    client = _get_client()
+    try:
+        with client.messages.stream(
+            model=CLAUDE_MODEL,
+            max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}],
+        ) as stream:
+            for text in stream.text_stream:
+                yield text
+    except anthropic.AuthenticationError:
+        raise AIUnavailableError("Invalid Anthropic API key. Check your ANTHROPIC_API_KEY.")
+    except anthropic.RateLimitError:
+        raise AIUnavailableError("Anthropic rate limit reached. Please wait a moment and try again.")
+    except anthropic.APIStatusError as e:
+        raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}). Please try again shortly.")
+    except anthropic.APIConnectionError:
+        raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
+
+
+def _parse_linkedin_text(text: str) -> dict:
+    if "HEADLINE:" in text and "SUMMARY:" in text:
+        summary_idx = text.index("SUMMARY:")
+        headline = text[:summary_idx].replace("HEADLINE:", "").strip()
+        summary = text[summary_idx + len("SUMMARY:"):].strip()
+        return {"headline": headline, "summary": summary}
+    return {"headline": text[:220], "summary": text}

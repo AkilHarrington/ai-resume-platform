@@ -90,7 +90,14 @@ export function SignupPage() {
           </Button>
         </form>
 
-        <p style={{ fontSize: 13, color: 'var(--gray-400)', textAlign: 'center', marginTop: 24 }}>
+        <p style={{ fontSize: 12, color: 'var(--gray-400)', textAlign: 'center', marginTop: 20, lineHeight: 1.6 }}>
+          By creating an account you agree to our{' '}
+          <Link to="/terms" style={{ color: 'var(--navy)', fontWeight: 600, textDecoration: 'none' }}>Terms of Service</Link>
+          {' '}and{' '}
+          <Link to="/privacy" style={{ color: 'var(--navy)', fontWeight: 600, textDecoration: 'none' }}>Privacy Policy</Link>.
+        </p>
+
+        <p style={{ fontSize: 13, color: 'var(--gray-400)', textAlign: 'center', marginTop: 16 }}>
           Already have an account?{' '}
           <Link to="/login" style={{ color: 'var(--navy)', fontWeight: 600, textDecoration: 'none' }}>Sign in</Link>
         </p>

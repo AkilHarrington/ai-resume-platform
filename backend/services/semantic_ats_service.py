@@ -2,11 +2,10 @@
 # File: services/semantic_ats_service.py
 # Purpose:
 # Claude-powered semantic ATS scorer.
-# Replaces rule-based keyword counting with genuine AI
-# evaluation across 5 hiring dimensions.
 # =========================================================
 
 import json
+import logging
 import os
 import re
 
@@ -15,26 +14,41 @@ import anthropic
 from services.exceptions import AIUnavailableError
 
 
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
+logger = logging.getLogger("ai_resume_studio.semantic_ats")
+
+# Haiku is 5-10x faster than Sonnet and sufficient for structured JSON scoring.
+# Use a non-dated alias — dated versions are deprecated without warning.
+CLAUDE_MODEL = os.getenv("CLAUDE_SCORER_MODEL", "claude-haiku-4-5")
 
 DIMENSION_WEIGHTS = {
-    "keyword_alignment":      0.30,  # reduced from 35% to make room for human_readability
+    "keyword_alignment":      0.30,
     "experience_relevance":   0.25,
     "seniority_match":        0.15,
     "achievement_quality":    0.15,
     "education_credentials":  0.10,
-    "human_readability":      0.05,  # does this read well to a human recruiter?
+    "human_readability":      0.05,
 }
 
+# =========================================================
+# Singleton client — instantiated once, reused across requests
+# =========================================================
 
-def get_client() -> anthropic.Anthropic:
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY is not set.")
-    return anthropic.Anthropic(api_key=api_key)
+_client: anthropic.Anthropic | None = None
+
+
+def _get_client() -> anthropic.Anthropic:
+    global _client
+    if _client is None:
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY is not set.")
+        _client = anthropic.Anthropic(api_key=api_key)
+    return _client
 
 
 def build_scoring_prompt(resume_text: str, job_description: str) -> str:
+    # Wrap user content in XML delimiters to prevent prompt injection.
+    # Claude treats content inside these tags as data, not instructions.
     return f"""You are a senior recruiter and ATS expert evaluating resume-to-job fit.
 
 Analyze the resume against the job description across 6 dimensions.
@@ -69,11 +83,13 @@ Return ONLY valid JSON — no markdown, no explanation, no code fences:
   "recruiter_verdict": "<2-3 sentence plain-English assessment a recruiter would give this candidate>"
 }}
 
-Resume:
+<resume>
 {resume_text}
+</resume>
 
-Job Description:
-{job_description}"""
+<job_description>
+{job_description}
+</job_description>"""
 
 
 def calculate_weighted_score(dimensions: dict) -> int:
@@ -92,13 +108,14 @@ def semantic_ats_score(resume_text: str, job_description: str) -> dict:
     if not job_description.strip():
         return _no_jd_response()
 
-    client = get_client()
+    client = _get_client()
     prompt = build_scoring_prompt(resume_text, job_description)
 
     try:
         response = client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=1024,
+            max_tokens=2048,
+            temperature=0,  # deterministic — same input → same score every time
             messages=[{"role": "user", "content": prompt}],
         )
         raw = response.content[0].text.strip()
@@ -117,9 +134,11 @@ def semantic_ats_score(resume_text: str, job_description: str) -> dict:
         raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}). Please try again shortly.")
     except anthropic.APIConnectionError:
         raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.error("semantic_ats_score JSONDecodeError: %s (response length: %d)", e, len(raw))
         return _fallback_response()
-    except Exception:
+    except Exception as e:
+        logger.error("semantic_ats_score unexpected error: %s: %s", type(e).__name__, e)
         return _fallback_response()
 
     # Validate and re-compute overall score from dimensions for consistency

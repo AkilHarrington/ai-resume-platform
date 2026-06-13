@@ -5,6 +5,8 @@
 # =========================================================
 
 import io
+import json
+import logging
 import os
 import sys
 
@@ -23,10 +25,13 @@ from models.cover_letter_models import CoverLetterRequest
 from models.linkedin_models import LinkedInRequest
 from services.ats_service import calculate_ats_score
 from services.semantic_ats_service import semantic_ats_score
+from fastapi.responses import StreamingResponse
 from services.resume_service import (
     optimize_resume_text,
     generate_cover_letter,
     generate_linkedin_optimization,
+    stream_cover_letter,
+    stream_linkedin_optimization,
 )
 from services.resume_parser import parse_resume_text
 from services.supabase_service import (
@@ -42,6 +47,16 @@ from services.exceptions import AIUnavailableError
 load_dotenv()
 
 # =========================================================
+# Logging — structured, leveled, named
+# =========================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("ai_resume_studio")
+
+# =========================================================
 # Safety guard — refuse to start if FORCE_PRO is on in production
 # =========================================================
 
@@ -49,13 +64,39 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
 FORCE_PRO = os.getenv("FORCE_PRO", "").lower() in ("true", "1", "yes")
 
 if ENVIRONMENT == "production" and FORCE_PRO:
-    print(
-        "ERROR: FORCE_PRO=true is set in a production environment. "
+    logger.critical(
+        "FORCE_PRO=true is set in a production environment. "
         "This would give every user free Pro access. "
-        "Set FORCE_PRO=false and restart.",
-        file=sys.stderr,
+        "Set FORCE_PRO=false and restart."
     )
     sys.exit(1)
+
+# =========================================================
+# Startup env var validation — fail loudly, not silently
+# =========================================================
+
+REQUIRED_ENV_VARS = [
+    "ANTHROPIC_API_KEY",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_KEY",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "STRIPE_MONTHLY_PRICE_ID",
+    "STRIPE_ONETIME_PRICE_ID",
+]
+
+_PLACEHOLDER_SUFFIXES = ("_placeholder", "your_key_here", "changeme")
+
+if ENVIRONMENT == "production":
+    _missing = []
+    for _var in REQUIRED_ENV_VARS:
+        _val = os.getenv(_var, "")
+        if not _val or any(_val.endswith(s) for s in _PLACEHOLDER_SUFFIXES):
+            _missing.append(_var)
+    if _missing:
+        for _var in _missing:
+            logger.critical("Required env var %s is missing or still set to placeholder.", _var)
+        sys.exit(1)
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
 
@@ -79,6 +120,7 @@ async def ai_unavailable_handler(request: Request, exc: AIUnavailableError):
     from fastapi.responses import JSONResponse
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
+
 origins_env = os.getenv("ALLOWED_ORIGINS", "")
 allowed_origins = [o.strip() for o in origins_env.split(",") if o.strip()]
 if not allowed_origins:
@@ -98,7 +140,23 @@ app.add_middleware(
 
 
 # =========================================================
-# Auth helpers
+# Security headers middleware
+# =========================================================
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # HSTS — only on HTTPS (production); omit in dev so browsers don't cache it
+    if ENVIRONMENT == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    return response
+
+
+# =========================================================
+# Auth helpers — sync: FastAPI runs these in a thread pool
 # =========================================================
 
 def get_current_user(request: Request) -> dict:
@@ -117,7 +175,14 @@ def require_pro(user: dict = Depends(get_current_user)) -> dict:
     """Require auth + active Pro subscription. FORCE_PRO bypasses in dev."""
     if FORCE_PRO:
         return user
-    if not get_user_pro_status(user["id"]):
+    try:
+        is_pro = get_user_pro_status(user["id"])
+    except Exception as e:
+        # Supabase connectivity failure — don't silently demote paying users.
+        # Return 503 so they know it's a service issue, not their account.
+        logger.error("get_user_pro_status failed for user %s: %s", user.get("id"), type(e).__name__)
+        raise HTTPException(status_code=503, detail="Unable to verify subscription status. Please try again in a moment.")
+    if not is_pro:
         raise HTTPException(status_code=403, detail="This feature requires a Pro plan.")
     return user
 
@@ -168,6 +233,9 @@ def extract_text_from_upload(file: UploadFile) -> str:
     filename = (file.filename or "").lower()
 
     if filename.endswith(".pdf"):
+        # Magic bytes check — real PDFs start with %PDF-
+        if not content.startswith(b"%PDF-"):
+            raise HTTPException(status_code=422, detail="File does not appear to be a valid PDF.")
         try:
             import pdfplumber
             import re as _re
@@ -175,7 +243,8 @@ def extract_text_from_upload(file: UploadFile) -> str:
                 text = "\n".join(page.extract_text() or "" for page in pdf.pages).strip()
             text = _re.sub(r'\(cid:\d+\)', '•', text)
             return text
-        except Exception:
+        except Exception as exc:
+            logger.warning("pdfplumber failed to parse upload: %s", exc)
             raise HTTPException(status_code=422, detail="Could not extract text from PDF.")
 
     if filename.endswith(".docx"):
@@ -183,7 +252,8 @@ def extract_text_from_upload(file: UploadFile) -> str:
             import docx
             doc = docx.Document(io.BytesIO(content))
             return "\n".join(p.text for p in doc.paragraphs if p.text.strip()).strip()
-        except Exception:
+        except Exception as exc:
+            logger.warning("python-docx failed to parse upload: %s", exc)
             raise HTTPException(status_code=422, detail="Could not extract text from DOCX.")
 
     try:
@@ -193,25 +263,37 @@ def extract_text_from_upload(file: UploadFile) -> str:
 
 
 # =========================================================
-# Health
+# Health — verifies env vars, not just process liveness
 # =========================================================
 
 @app.get("/")
 def root():
     return {"message": "AI Resume Studio API", "version": "3.0.0"}
 
+
 @app.get("/health")
 def health():
+    issues = []
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        issues.append("ANTHROPIC_API_KEY missing")
+    if not os.getenv("SUPABASE_URL"):
+        issues.append("SUPABASE_URL missing")
+    if not os.getenv("SUPABASE_SERVICE_KEY"):
+        issues.append("SUPABASE_SERVICE_KEY missing")
+    if not os.getenv("STRIPE_WEBHOOK_SECRET"):
+        issues.append("STRIPE_WEBHOOK_SECRET missing")
+    if issues:
+        return {"status": "degraded", "issues": issues}
     return {"status": "ok"}
 
 
 # =========================================================
-# Resume Upload — auth required, free tier
+# Resume Upload — sync def: runs in FastAPI's thread pool
 # =========================================================
 
 @app.post("/api/resume/upload")
 @limiter.limit("20/minute")
-async def resume_upload(request: Request, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+def resume_upload(request: Request, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
     resume_text = extract_text_from_upload(file)
     if not resume_text:
         raise HTTPException(status_code=422, detail="No text could be extracted from the file.")
@@ -220,18 +302,34 @@ async def resume_upload(request: Request, file: UploadFile = File(...), user: di
 
 
 # =========================================================
-# ATS Scan — auth required, free tier
+# ATS Scan — sync def: runs in FastAPI's thread pool
 # =========================================================
 
 @app.post("/api/resume/scan")
 @limiter.limit("10/minute")
-async def resume_scan(request: Request, data: ResumeScanRequest, user: dict = Depends(get_current_user)):
+def resume_scan(request: Request, data: ResumeScanRequest, user: dict = Depends(get_current_user)):
     job_description = data.jobDescription or ""
 
-    if job_description.strip():
-        ats = semantic_ats_score(data.resumeText, job_description)
-    else:
-        ats = calculate_ats_score(data.resumeText, job_description)
+    if not job_description.strip():
+        return {
+            "overallScore": None,
+            "summary": "Add a job description to get your ATS score.",
+            "previewText": data.resumeText,
+            "parsedResume": {},
+            "matchedKeywords": [],
+            "missingKeywords": [],
+            "categoryScores": [],
+            "matchIntelligence": {},
+            "strengths": [],
+            "gaps": [],
+            "recruiterVerdict": "",
+            "semantic": True,
+            "noJd": True,
+            "issues": [],
+            "recommendations": [],
+        }
+
+    ats = semantic_ats_score(data.resumeText, job_description)
 
     matched = ats.get("matched_keywords", [])
     missing = ats.get("missing_keywords", [])
@@ -269,12 +367,12 @@ async def resume_scan(request: Request, data: ResumeScanRequest, user: dict = De
 
 
 # =========================================================
-# Resume Optimize — auth + Pro required
+# Resume Optimize — sync def: runs in FastAPI's thread pool
 # =========================================================
 
 @app.post("/api/resume/optimize")
 @limiter.limit("5/minute")
-async def resume_optimize(request: Request, data: ResumeOptimizeRequest, user: dict = Depends(require_pro)):
+def resume_optimize(request: Request, data: ResumeOptimizeRequest, user: dict = Depends(require_pro)):
     job_description = data.jobDescription or ""
 
     rule_ats = calculate_ats_score(data.resumeText, job_description)
@@ -295,16 +393,43 @@ async def resume_optimize(request: Request, data: ResumeOptimizeRequest, user: d
 
     if job_description.strip():
         improved_ats = semantic_ats_score(optimized_text, job_description)
+        # Retry once if the scorer returned 0 (transient Claude failure)
+        if improved_ats.get("ats_score", 0) == 0 and original_score > 0:
+            logger.warning("First re-score returned 0 — retrying once.")
+            improved_ats = semantic_ats_score(optimized_text, job_description)
     else:
         improved_ats = calculate_ats_score(optimized_text, job_description)
     improved_score = improved_ats.get("ats_score", 0)
 
-    max_allowed = 15 if original_score < 60 else (12 if original_score < 75 else 10)
+    # If both semantic attempts failed, try to estimate from keyword diff.
+    # IMPORTANT: never fabricate an improvement — return original score honestly if we can't measure.
+    scorer_failed = improved_score == 0 and original_score > 0
+    if scorer_failed:
+        logger.warning("Semantic re-score failed twice — estimating from keyword diff.")
+        rule_improved = calculate_ats_score(optimized_text, job_description)
+        rule_before = rule_ats.get("ats_score", 0)
+        rule_after = rule_improved.get("ats_score", 0)
+        if rule_before > 0 and rule_after > rule_before:
+            keyword_gain = (rule_after - rule_before) / 100.0
+            estimated_gain = max(1, min(round(original_score * keyword_gain * 0.5), 10))
+            improved_score = original_score + estimated_gain
+            improved_ats = {**original_ats, "ats_score": improved_score,
+                            "matched_keywords": rule_improved.get("matched_keywords", []),
+                            "missing_keywords": rule_improved.get("missing_keywords", [])}
+        else:
+            # Keyword diff shows no improvement either — return original score honestly.
+            # Do NOT invent points. The customer keeps their optimized text.
+            logger.warning("Keyword diff also shows no improvement — returning original score.")
+            improved_score = original_score
+            improved_ats = {**original_ats, "ats_score": improved_score}
 
-    if improved_score - original_score > max_allowed:
-        optimized_text = data.resumeText
-        improved_ats = original_ats
-        improved_score = original_score
+    # Cap credibility ceiling: clamp the displayed score, but KEEP the optimized text.
+    # Never revert the text — the customer paid for the optimization.
+    max_allowed = 15 if original_score < 60 else (15 if original_score < 75 else 12)
+
+    if not scorer_failed and improved_score - original_score > max_allowed:
+        improved_score = original_score + max_allowed
+        improved_ats = {**improved_ats, "ats_score": improved_score}
 
     show_guidance = improved_score <= original_score
 
@@ -332,12 +457,12 @@ async def resume_optimize(request: Request, data: ResumeOptimizeRequest, user: d
 
 
 # =========================================================
-# Cover Letter — auth + Pro required
+# Cover Letter — sync def
 # =========================================================
 
 @app.post("/api/cover-letter/generate")
 @limiter.limit("5/minute")
-async def cover_letter_generate(request: Request, data: CoverLetterRequest, user: dict = Depends(require_pro)):
+def cover_letter_generate(request: Request, data: CoverLetterRequest, user: dict = Depends(require_pro)):
     if not data.resumeText:
         raise HTTPException(status_code=400, detail="Resume text is required.")
     result = generate_cover_letter(
@@ -352,12 +477,38 @@ async def cover_letter_generate(request: Request, data: CoverLetterRequest, user
 
 
 # =========================================================
-# LinkedIn — auth + Pro required
+# Cover Letter — streaming (async required for StreamingResponse)
+# =========================================================
+
+@app.post("/api/cover-letter/stream")
+@limiter.limit("5/minute")
+async def cover_letter_stream(request: Request, data: CoverLetterRequest, user: dict = Depends(require_pro)):
+    def generate():
+        try:
+            for chunk in stream_cover_letter(
+                data.resumeText,
+                data.jobDescription or "",
+                data.companyName or "",
+                data.candidateName or "",
+            ):
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            yield "data: [DONE]\n\n"
+        except AIUnavailableError as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# =========================================================
+# LinkedIn — sync def
 # =========================================================
 
 @app.post("/api/linkedin/optimize")
 @limiter.limit("5/minute")
-async def linkedin_optimize(request: Request, data: LinkedInRequest, user: dict = Depends(require_pro)):
+def linkedin_optimize(request: Request, data: LinkedInRequest, user: dict = Depends(require_pro)):
     if not data.resumeText:
         raise HTTPException(status_code=400, detail="Resume text is required.")
     result = generate_linkedin_optimization(
@@ -366,6 +517,31 @@ async def linkedin_optimize(request: Request, data: LinkedInRequest, user: dict 
         target_role=data.targetRole or "",
     )
     return {"headline": result.get("headline", ""), "summary": result.get("summary", "")}
+
+
+# =========================================================
+# LinkedIn — streaming (async required for StreamingResponse)
+# =========================================================
+
+@app.post("/api/linkedin/stream")
+@limiter.limit("5/minute")
+async def linkedin_stream(request: Request, data: LinkedInRequest, user: dict = Depends(require_pro)):
+    def generate():
+        try:
+            for chunk in stream_linkedin_optimization(
+                data.resumeText,
+                data.jobDescription or "",
+                data.targetRole or "",
+            ):
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            yield "data: [DONE]\n\n"
+        except AIUnavailableError as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # =========================================================
@@ -378,7 +554,7 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 
 @app.post("/api/payments/create-checkout-session")
-async def create_checkout_session(request: Request, plan: str = "monthly", user: dict = Depends(get_current_user)):
+def create_checkout_session(request: Request, plan: str = "monthly", user: dict = Depends(get_current_user)):
     if not stripe.api_key:
         raise HTTPException(status_code=503, detail="Payment system not configured yet.")
     price_id = STRIPE_MONTHLY_PRICE_ID if plan == "monthly" else STRIPE_ONETIME_PRICE_ID
@@ -389,7 +565,7 @@ async def create_checkout_session(request: Request, plan: str = "monthly", user:
             mode="subscription" if plan == "monthly" else "payment",
             success_url=f"{FRONTEND_URL}/workspace?upgrade=success",
             cancel_url=f"{FRONTEND_URL}/pricing",
-            customer_email=user.get("email"),  # pre-fill email in Stripe checkout
+            customer_email=user.get("email"),
         )
         return {"url": session.url}
     except stripe.StripeError as e:
@@ -397,14 +573,19 @@ async def create_checkout_session(request: Request, plan: str = "monthly", user:
 
 
 @app.get("/api/user/pro-status")
-async def pro_status(request: Request, user: dict = Depends(get_current_user)):
+@limiter.limit("30/minute")
+def pro_status(request: Request, user: dict = Depends(get_current_user)):
     if FORCE_PRO:
         return {"isPro": True}
-    return {"isPro": get_user_pro_status(user["id"])}
+    try:
+        return {"isPro": get_user_pro_status(user["id"])}
+    except Exception as e:
+        logger.error("pro_status check failed for user %s: %s", user.get("id"), type(e).__name__)
+        raise HTTPException(status_code=503, detail="Unable to verify subscription status. Please try again in a moment.")
 
 
 # =========================================================
-# Stripe Webhook
+# Stripe Webhook — async required for await request.body()
 # =========================================================
 
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
@@ -420,7 +601,9 @@ async def stripe_webhook(request: Request):
     except stripe.errors.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid Stripe signature.")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # Log detail internally; return generic message to untrusted caller
+        logger.error("Stripe webhook parse error: %s", type(e).__name__)
+        raise HTTPException(status_code=400, detail="Webhook processing failed.")
 
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
@@ -436,6 +619,9 @@ async def stripe_webhook(request: Request):
                     stripe_customer_id=customer_id,
                     stripe_subscription_id=subscription_id,
                 )
+                logger.info("Pro access granted for %s", customer_email)
+            else:
+                logger.warning("checkout.session.completed: no profile found for %s", customer_email)
 
     elif event["type"] == "customer.subscription.deleted":
         subscription = event["data"]["object"]
@@ -443,7 +629,14 @@ async def stripe_webhook(request: Request):
         if customer_id:
             try:
                 revoke_user_pro(stripe_customer_id=customer_id)
-            except Exception:
-                pass  # Don't fail the webhook acknowledgment
+                logger.info("Pro access revoked for Stripe customer %s", customer_id)
+            except Exception as e:
+                # Log the failure — this must not silently pass. Alert and investigate.
+                logger.error(
+                    "CRITICAL: Failed to revoke Pro for Stripe customer %s: %s",
+                    customer_id, e
+                )
+                # Still return 200 so Stripe doesn't retry infinitely,
+                # but the error is now visible in logs for manual remediation.
 
     return {"received": True}

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../app/AuthContext'
 import { useDropzone } from 'react-dropzone'
@@ -6,6 +6,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Logo } from '../components/Logo'
 import { Button } from '../components/Button'
 import { ErrorBoundary } from '../components/ErrorBoundary'
+import { useToast } from '../components/Toast'
 import { ScanTab } from '../features/workspace/ScanTab'
 import { OptimizeTab } from '../features/workspace/OptimizeTab'
 import { CoverLetterTab } from '../features/workspace/CoverLetterTab'
@@ -14,7 +15,7 @@ import { UpgradePrompt } from '../features/workspace/shared'
 import { useIsMobile } from '../hooks/useIsMobile'
 import {
   uploadResume, scanResume, optimizeResume,
-  generateCoverLetter, optimizeLinkedIn, getProStatus,
+  streamCoverLetter, streamLinkedIn, getProStatus,
   type ScanResult, type OptimizeResult,
 } from '../api/resumeApi'
 
@@ -31,31 +32,45 @@ export function WorkspacePage() {
   const navigate = useNavigate()
   const { user, signOut, loading } = useAuth()
   const isMobile = useIsMobile()
+  const { showToast } = useToast()
 
-  if (!loading && !user) { navigate('/login'); return null }
-
+  // All hooks must be declared before any conditional return (Rules of Hooks).
+  // The redirect lives in useEffect so hooks are always called in the same order.
   const [activeTab, setActiveTab]           = useState<Tab>('scan')
   const [resumeText, setResumeText]         = useState('')
   const [jobDescription, setJobDescription] = useState('')
   const [companyName, setCompanyName]       = useState('')
   const [targetRole, setTargetRole]         = useState('')
-  const [scanResult, setScanResult]         = useState<ScanResult | null>(null)
-  const [optimizeResult, setOptimizeResult] = useState<OptimizeResult | null>(null)
-  const [coverLetter, setCoverLetter]       = useState('')
-  const [linkedin, setLinkedin]             = useState<{ headline: string; summary: string } | null>(null)
-  const [uploadError, setUploadError]       = useState('')
-  const [inputExpanded, setInputExpanded]   = useState(true)
+  const [scanResult, setScanResult]           = useState<ScanResult | null>(null)
+  const [optimizeResult, setOptimizeResult]   = useState<OptimizeResult | null>(null)
+  const [optimizedScore, setOptimizedScore]   = useState<number | null>(null)
+  const [coverLetter, setCoverLetter]         = useState('')
+  const [isStreamingCover, setIsStreamingCover] = useState(false)
+  const [coverError, setCoverError]           = useState('')
+  const [linkedin, setLinkedin]               = useState<{ headline: string; summary: string } | null>(null)
+  const [isStreamingLinkedIn, setIsStreamingLinkedIn] = useState(false)
+  const [linkedinError, setLinkedinError]     = useState('')
+  const [uploadError, setUploadError]         = useState('')
+  const [inputExpanded, setInputExpanded]     = useState(true)
 
+  // Redirect unauthenticated users — inside useEffect so all hooks run unconditionally.
+  useEffect(() => {
+    if (!loading && !user) navigate('/login')
+  }, [loading, user, navigate])
+
+  // Only fetch pro status once the user session is confirmed — prevents a spurious
+  // 401 "Session expired" error on first load before auth has resolved.
   const proQuery = useQuery({
     queryKey: ['pro-status', user?.id],
     queryFn: () => getProStatus(),
     staleTime: 60_000,
+    enabled: !!user,
   })
   const isPro = proQuery.data?.isPro ?? false
 
   const uploadMutation = useMutation({
     mutationFn: uploadResume,
-    onSuccess: (data) => { setResumeText(data.resumeText); setUploadError(''); if (isMobile) setInputExpanded(false) },
+    onSuccess: (data) => { setResumeText(data.resumeText); setUploadError(''); showToast('Resume uploaded successfully'); if (isMobile) setInputExpanded(false) },
     onError: (err: Error) => setUploadError(
       err.message.includes('413')
         ? 'File too large. Maximum size is 5 MB.'
@@ -71,16 +86,44 @@ export function WorkspacePage() {
   })
   const optimizeMutation = useMutation({
     mutationFn: () => optimizeResume(resumeText, jobDescription || undefined),
-    onSuccess: (data) => setOptimizeResult(data),
+    onSuccess: (data) => { setOptimizeResult(data); setOptimizedScore(data.optimizedScore) },
   })
-  const coverMutation    = useMutation({
-    mutationFn: () => generateCoverLetter({ resumeText, jobDescription: jobDescription || undefined, companyName: companyName || undefined }),
-    onSuccess: (data) => setCoverLetter(data.coverLetter),
-  })
-  const linkedinMutation = useMutation({
-    mutationFn: () => optimizeLinkedIn({ resumeText, jobDescription: jobDescription || undefined, targetRole: targetRole || undefined }),
-    onSuccess: (data) => setLinkedin(data),
-  })
+  const runCoverLetter = useCallback(async () => {
+    setCoverLetter('')
+    setCoverError('')
+    setIsStreamingCover(true)
+    await streamCoverLetter(
+      { resumeText, jobDescription: jobDescription || undefined, companyName: companyName || undefined },
+      (chunk) => setCoverLetter(prev => prev + chunk),
+      () => setIsStreamingCover(false),
+      (msg) => { setCoverError(msg); setIsStreamingCover(false) },
+    )
+  }, [resumeText, jobDescription, companyName])
+
+  const runLinkedIn = useCallback(async () => {
+    setLinkedin(null)
+    setLinkedinError('')
+    setIsStreamingLinkedIn(true)
+    let raw = ''
+    await streamLinkedIn(
+      { resumeText, jobDescription: jobDescription || undefined, targetRole: targetRole || undefined },
+      (chunk) => {
+        raw += chunk
+        // Parse HEADLINE:/SUMMARY: structure progressively
+        if (raw.includes('SUMMARY:')) {
+          const summaryIdx = raw.indexOf('SUMMARY:')
+          setLinkedin({
+            headline: raw.slice(0, summaryIdx).replace('HEADLINE:', '').trim(),
+            summary: raw.slice(summaryIdx + 'SUMMARY:'.length).trim(),
+          })
+        } else {
+          setLinkedin({ headline: raw.replace('HEADLINE:', '').trim(), summary: '' })
+        }
+      },
+      () => setIsStreamingLinkedIn(false),
+      (msg) => { setLinkedinError(msg); setIsStreamingLinkedIn(false) },
+    )
+  }, [resumeText, jobDescription, targetRole])
 
   const onDrop = useCallback((files: File[]) => {
     if (files[0]) uploadMutation.mutate(files[0])
@@ -95,6 +138,9 @@ export function WorkspacePage() {
     },
     maxFiles: 1,
   })
+
+  // Render nothing while auth is loading or user is being redirected to /login
+  if (loading || !user) return null
 
   const scanError = (scanMutation.error as Error)?.message || ''
 
@@ -257,7 +303,7 @@ export function WorkspacePage() {
     <>
       {activeTab === 'scan' && (
         <ErrorBoundary tabName="ATS Scanner">
-          <ScanTab result={scanResult} isLoading={scanMutation.isPending} hasResume={!!resumeText} isPro={isPro} error={scanError} />
+          <ScanTab result={scanResult} isLoading={scanMutation.isPending} hasResume={!!resumeText} isPro={isPro} error={scanError} optimizedScore={optimizedScore} />
         </ErrorBoundary>
       )}
       {activeTab === 'optimize' && (
@@ -270,14 +316,14 @@ export function WorkspacePage() {
       {activeTab === 'cover-letter' && (
         isPro
           ? <ErrorBoundary tabName="Cover Letter">
-              <CoverLetterTab result={coverLetter} isLoading={coverMutation.isPending} hasResume={!!resumeText} companyName={companyName} setCompanyName={setCompanyName} onRun={() => coverMutation.mutate()} error={(coverMutation.error as Error)?.message || ''} />
+              <CoverLetterTab result={coverLetter} isLoading={isStreamingCover && !coverLetter} isStreaming={isStreamingCover} hasResume={!!resumeText} companyName={companyName} setCompanyName={setCompanyName} onRun={runCoverLetter} error={coverError} />
             </ErrorBoundary>
           : <UpgradePrompt feature="Cover Letter Generator" description="Claude writes a tailored, professional cover letter based on your resume and job description." />
       )}
       {activeTab === 'linkedin' && (
         isPro
           ? <ErrorBoundary tabName="LinkedIn Optimizer">
-              <LinkedInTab result={linkedin} isLoading={linkedinMutation.isPending} hasResume={!!resumeText} targetRole={targetRole} setTargetRole={setTargetRole} onRun={() => linkedinMutation.mutate()} error={(linkedinMutation.error as Error)?.message || ''} />
+              <LinkedInTab result={linkedin} isLoading={isStreamingLinkedIn && !linkedin} isStreaming={isStreamingLinkedIn} hasResume={!!resumeText} targetRole={targetRole} setTargetRole={setTargetRole} onRun={runLinkedIn} error={linkedinError} />
             </ErrorBoundary>
           : <UpgradePrompt feature="LinkedIn Optimizer" description="Claude crafts a keyword-rich headline and summary optimized for your target role." />
       )}

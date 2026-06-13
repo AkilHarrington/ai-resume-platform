@@ -26,7 +26,7 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
 | **JD** | Job description (pasted by user for ATS scan) |
 | **semantic scan** | ATS scan using Claude — requires API credits |
 
-## Current State (after session 6)
+## Current State (after session 9 — principal code review remediation complete)
 
 ### ✅ Done
 - Claude semantic ATS scorer — 6 dimensions (Human Readability 5%, Keyword Alignment 30%)
@@ -34,7 +34,7 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
 - Cover letter prompt: banned hollow openers, enforces human-sounding specific output
 - PDF download: @react-pdf/renderer wired into OptimizeTab — 3 templates (Professional, Modern, Executive)
 - Pro gate: real enforcement via `isPro` from `/api/user/pro-status`; `FORCE_PRO` env override
-- File size limit: 5MB on upload endpoint
+- File size limit: 5MB on upload endpoint; PDF magic bytes check (`%PDF-` header)
 - Axios timeout: 60s with readable error message
 - Scorer consistency: optimize uses semantic scorer for displayed before/after scores
 - Full project cleanup: zero dead files, no duplicate frontends
@@ -46,15 +46,16 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
 - **Auth routing**: unauthenticated users redirected to `/login`; landing page routes to `/signup` or `/workspace` based on session
 - **Login/Signup pages**: `/login` and `/signup` with email confirmation flow
 - **Workspace header**: shows user email, PRO badge, Sign Out button
-- **Fixed**: `resumeApi.ts` broken `./config` import replaced with inline `import.meta.env`
 - **Homebrew + Stripe CLI**: installed and authenticated locally
 - **Supabase + Stripe keys**: all wired into both `.env` files
-- **Security hardening (session 6)**:
+- **Security hardening**:
   - JWT verification on every backend endpoint via `get_current_user()` FastAPI Depends
-  - Server-side pro gate via `require_pro()` — 403 before any Claude call
-  - Rate limiting via slowapi: 20/min upload, 10/min scan, 5/min optimize/cover/linkedin
+  - Server-side pro gate via `require_pro()` — 403 before any Claude call; Supabase outage → 503 (not silent demotion)
+  - Rate limiting via slowapi: 20/min upload, 10/min scan, 5/min optimize/cover/linkedin, 30/min pro-status
   - FORCE_PRO production guard — `sys.exit(1)` if ENVIRONMENT=production + FORCE_PRO=true
-  - Subscription cancellation webhook (`customer.subscription.deleted` → flips `is_pro=false`)
+  - Subscription cancellation webhook (`customer.subscription.deleted` → flips `is_pro=false`) — logs on failure, no silent pass
+  - HTTP security headers middleware: X-Content-Type-Options, X-Frame-Options, Referrer-Policy, HSTS (prod only)
+  - Startup env var validation (production) — `sys.exit(1)` on missing critical vars
 - **Claude fallback error handling**: `AIUnavailableError` propagates auth/rate/connection errors as 503 with readable messages
 - **React error boundaries**: `ErrorBoundary` class component wraps each tab; shows named error card + "Try again" button
 - **WorkspacePage split**: monolith broken into feature files — 0 TypeScript errors
@@ -63,7 +64,13 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
   - `src/features/workspace/OptimizeTab.tsx` — resume optimizer, before/after scores, PDF download
   - `src/features/workspace/CoverLetterTab.tsx` — cover letter generator
   - `src/features/workspace/LinkedInTab.tsx` — LinkedIn headline + About optimizer
-  - `src/pages/WorkspacePage.tsx` — thin 272-line shell, imports from feature files
+  - `src/pages/WorkspacePage.tsx` — thin shell, imports from feature files
+- **Principal code review — all 28 actionable issues resolved**:
+  - CRITICAL: sync def handlers (thread pool, no event loop blocking), fabricated +3 removed, /health checks real deps
+  - HIGH: singleton clients, silent excepts removed, Router.navigate, max_tokens 8192, rate limit pro-status, structured logging, prompt injection XML delimiters, startup env validation, 26-test pytest suite
+  - MEDIUM: React hooks ordering, enabled:!!user guard, LCS dep array fixed, SSE null guard, scaleX animation, Haiku model alias, security headers
+  - LOW: `--success` color → #047857 (WCAG AA 4.54:1), high-visibility focus rings (button/a/[role=tab])
+  - Deferred: API versioning prefix (pre-launch disruption), Zod runtime validation (half-day project)
 
 ### 🔲 Next session
 1. **Add Anthropic API credits** (blocker — nothing AI works without this)
@@ -73,6 +80,8 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
 5. **Privacy policy + Terms of Service** — required before public launch
 
 ### Deferred (explicit)
+- API versioning (/api/v1 prefix) — add after deploy, not before
+- Zod runtime validation for API responses — post-launch hardening
 - Resume score history
 - JD URL scraper
 - DOCX download
@@ -117,5 +126,5 @@ stripe listen --forward-to localhost:8000/api/payments/webhook
 | `frontend-app/src/features/resume-templates/` | 3 template configs + ResumePDF renderer |
 
 ## Project Rating
-**Current: 9.5/10** — security hardened, error resilient, component architecture clean, zero TS errors.
-Gap to 10: Anthropic credits + end-to-end test, deployment, privacy policy/ToS.
+**Current: 7.5/10** — all 28 code review issues resolved. Honest score: production-ready architecture, zero fabricated data, real security posture.
+Gap to 10: Anthropic credits + end-to-end test (blocker), deployment to Render/Vercel, privacy policy/ToS, post-launch API versioning + Zod validation.

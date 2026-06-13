@@ -4,6 +4,7 @@ import { LoadingCard, EmptyState, EmptyCard } from './shared'
 interface Props {
   result: { headline: string; summary: string } | null
   isLoading: boolean
+  isStreaming?: boolean
   hasResume: boolean
   targetRole: string
   setTargetRole: (v: string) => void
@@ -11,7 +12,7 @@ interface Props {
   error: string
 }
 
-export function LinkedInTab({ result, isLoading, hasResume, targetRole, setTargetRole, onRun, error }: Props) {
+export function LinkedInTab({ result, isLoading, isStreaming, hasResume, targetRole, setTargetRole, onRun, error }: Props) {
   if (isLoading) return <LoadingCard message="Claude is optimizing your LinkedIn profile..." />
   if (!result) return (
     <EmptyCard>
@@ -47,9 +48,15 @@ export function LinkedInTab({ result, isLoading, hasResume, targetRole, setTarge
       <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)' }}>About Section</h3>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(result.summary)}>📋 Copy</Button>
-            <Button size="sm" variant="secondary" onClick={onRun}>Regenerate</Button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {isStreaming && (
+              <span style={{ fontSize: 12, color: 'var(--emerald)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--emerald)', display: 'inline-block', animation: 'pulse 1s ease-in-out infinite' }} />
+                Writing…
+              </span>
+            )}
+            <Button size="sm" variant="outline" disabled={isStreaming} onClick={() => navigator.clipboard.writeText(result.summary)}>📋 Copy</Button>
+            <Button size="sm" variant="secondary" disabled={isStreaming} onClick={onRun}>Regenerate</Button>
           </div>
         </div>
         <div style={{

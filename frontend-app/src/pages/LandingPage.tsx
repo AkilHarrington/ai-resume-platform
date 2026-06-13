@@ -226,7 +226,19 @@ export function LandingPage() {
       {/* Footer */}
       <footer style={{ background: 'var(--navy-dark)', padding: '36px 20px', textAlign: 'center' }}>
         <Logo size="sm" variant="light" />
-        <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13, marginTop: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 16, marginBottom: 12 }}>
+          <a href="/privacy" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textDecoration: 'none' }}
+            onMouseOver={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.85)')}
+            onMouseOut={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.5)')}>
+            Privacy Policy
+          </a>
+          <a href="/terms" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textDecoration: 'none' }}
+            onMouseOver={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.85)')}
+            onMouseOut={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.5)')}>
+            Terms of Service
+          </a>
+        </div>
+        <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 12 }}>
           © {new Date().getFullYear()} AI Resume Studio. All rights reserved.
         </p>
       </footer>
