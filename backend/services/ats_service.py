@@ -73,6 +73,13 @@ STOPWORDS = {
     "multiple",
     "times",
     "tools",
+    # common filler words often extracted from JDs
+    "our", "all", "here", "into", "job", "key", "meet", "plus",
+    "clearly", "aligns", "align", "field", "degree", "description",
+    "paste", "level", "levels", "communicate", "identify",
+    "we", "you", "your", "they", "them", "us", "who", "what",
+    "how", "when", "where", "which", "any", "not", "but", "also",
+    "new", "each", "per", "way", "use", "used", "using", "get",
 }
 
 SYNONYM_MAP = {

@@ -1,39 +1,47 @@
 # =========================================================
 # File: main.py
 # Purpose:
-# FastAPI backend entry point for the current AI Resume Platform frontend.
+# FastAPI backend for AI Resume Studio.
 # =========================================================
 
+import io
 import os
 
+import stripe
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from models.optimize_models import ResumeOptimizeRequest
 from models.scan_models import ResumeScanRequest
+from models.cover_letter_models import CoverLetterRequest
+from models.linkedin_models import LinkedInRequest
 from services.ats_service import calculate_ats_score
-from services.resume_service import optimize_resume_text
+from services.semantic_ats_service import semantic_ats_score
+from services.resume_service import (
+    optimize_resume_text,
+    generate_cover_letter,
+    generate_linkedin_optimization,
+)
+from services.resume_parser import parse_resume_text
 
 load_dotenv()
 
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
+
 # =========================================================
-# FastAPI App Initialization
+# App
 # =========================================================
 
-app = FastAPI(
-    title="AI Resume Platform API",
-    version="2.0.0",
-)
+app = FastAPI(title="AI Resume Studio API", version="3.0.0")
 
 origins_env = os.getenv("ALLOWED_ORIGINS", "")
-allowed_origins = [origin.strip() for origin in origins_env.split(",") if origin.strip()]
-
+allowed_origins = [o.strip() for o in origins_env.split(",") if o.strip()]
 if not allowed_origins:
     allowed_origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "https://ai-resume-platform-frontend.onrender.com",
+        "https://ai-resume-studio.vercel.app",
     ]
 
 app.add_middleware(
@@ -46,123 +54,33 @@ app.add_middleware(
 
 
 # =========================================================
+# Constants
+# =========================================================
+
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+# =========================================================
 # Helpers
 # =========================================================
 
-def build_resume_data_from_text(resume_text: str) -> dict:
-    return {
-        "full_name": "",
-        "email": "",
-        "phone": "",
-        "location": "",
-        "professional_summary": resume_text,
-        "skills": [],
-        "professional_experience": [],
-        "education": [],
-        "certifications": [],
-    }
-
-
-def resume_data_to_text(resume_data: dict) -> str:
-    if not isinstance(resume_data, dict):
-        return ""
-
-    parts: list[str] = []
-
-    full_name = str(resume_data.get("full_name", "")).strip()
-    if full_name:
-        parts.append(full_name)
-
-    email = str(resume_data.get("email", "")).strip()
-    phone = str(resume_data.get("phone", "")).strip()
-    location = str(resume_data.get("location", "")).strip()
-
-    if email:
-        parts.append(email)
-    if phone:
-        parts.append(phone)
-    if location:
-        parts.append(location)
-
-    summary = str(resume_data.get("professional_summary", "")).strip()
-    if summary:
-        parts.extend(["", "Professional Summary", "", summary])
-
-    skills = resume_data.get("skills", [])
-    if skills:
-        parts.extend(["", "Skills", ""])
-        parts.extend(str(skill).strip() for skill in skills if str(skill).strip())
-
-    experience = resume_data.get("professional_experience", [])
-    if experience:
-        parts.extend(["", "Experience", ""])
-        for role in experience:
-            company = str(role.get("company", "")).strip()
-            title = str(role.get("title", "")).strip()
-
-            if company:
-                parts.append(company)
-            if title:
-                parts.append(title)
-
-            for bullet in role.get("description", []):
-                bullet_text = str(bullet).strip()
-                if bullet_text:
-                    parts.append(f"• {bullet_text}")
-
-            parts.append("")
-
-    education = resume_data.get("education", [])
-    if education:
-        parts.extend(["Education", ""])
-        parts.extend(str(item).strip() for item in education if str(item).strip())
-
-    certifications = resume_data.get("certifications", [])
-    if certifications:
-        parts.extend(["", "Certifications", ""])
-        parts.extend(str(item).strip() for item in certifications if str(item).strip())
-
-    return "\n".join(line for line in parts if line is not None).strip()
-
-
 def build_optimization_guidance(resume_text: str) -> dict:
     lowered = resume_text.lower()
+    bullet_lines = [
+        l.strip() for l in resume_text.splitlines()
+        if l.strip().startswith("•") or l.strip().startswith("-")
+    ]
+    has_metrics = any(s in lowered for s in {"%", "$", "increase", "decrease", "reduced", "improved", "grew", "saved"})
+    has_leadership = any(t in lowered for t in {"led", "managed", "oversaw", "directed", "supervised", "owned"})
+    has_operations = any(t in lowered for t in {"operations", "workflow", "process", "planning", "coordination"})
 
     reasons = []
-    bullet_lines = [
-        line.strip()
-        for line in resume_text.splitlines()
-        if line.strip().startswith("•") or line.strip().startswith("-")
-    ]
-
-    leadership_terms = {
-        "led", "lead", "managed", "manage", "oversaw", "oversee",
-        "directed", "supervised", "owned", "headed",
-    }
-
-    metric_signals = {
-        "%", "$", "increase", "decrease", "reduced", "improved",
-        "grew", "saved", "raised", "cut", "boosted",
-    }
-
-    operations_terms = {
-        "operations", "operational", "workflow", "process", "planning",
-        "coordination", "reporting", "oversight",
-    }
-
-    has_leadership = any(term in lowered for term in leadership_terms)
-    has_metrics = any(signal in lowered for signal in metric_signals)
-    has_operations = any(term in lowered for term in operations_terms)
-
     if len(bullet_lines) < 4 or not has_metrics:
         reasons.append("The experience section lacks measurable accomplishments.")
-
     if not has_leadership:
         reasons.append("Leadership responsibilities are not clearly described.")
-
     if not has_operations:
         reasons.append("Operational responsibilities are not evident.")
-
     if not reasons:
         reasons.append("The current resume already appears close to its realistic optimization ceiling.")
 
@@ -170,22 +88,49 @@ def build_optimization_guidance(resume_text: str) -> dict:
         "title": "Optimization could not significantly improve this resume because:",
         "reasons": reasons,
         "suggestionsTitle": "Consider expanding your experience bullets with:",
-        "suggestions": [
-            "Actions you led",
-            "Results you achieved",
-            "Teams or processes you managed",
-        ],
+        "suggestions": ["Actions you led", "Results you achieved", "Teams or processes you managed"],
     }
 
 
+def extract_text_from_upload(file: UploadFile) -> str:
+    content = file.file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large. Maximum upload size is 5 MB.")
+    filename = (file.filename or "").lower()
+
+    if filename.endswith(".pdf"):
+        try:
+            import pdfplumber
+            import re as _re
+            with pdfplumber.open(io.BytesIO(content)) as pdf:
+                text = "\n".join(page.extract_text() or "" for page in pdf.pages).strip()
+            # Replace PDF glyph IDs (e.g. bullet chars rendered as (cid:127)) with •
+            text = _re.sub(r'\(cid:\d+\)', '•', text)
+            return text
+        except Exception:
+            raise HTTPException(status_code=422, detail="Could not extract text from PDF.")
+
+    if filename.endswith(".docx"):
+        try:
+            import docx
+            doc = docx.Document(io.BytesIO(content))
+            return "\n".join(p.text for p in doc.paragraphs if p.text.strip()).strip()
+        except Exception:
+            raise HTTPException(status_code=422, detail="Could not extract text from DOCX.")
+
+    try:
+        return content.decode("utf-8").strip()
+    except Exception:
+        raise HTTPException(status_code=422, detail="Unsupported file format. Please upload PDF, DOCX, or plain text.")
+
+
 # =========================================================
-# Health Check
+# Health
 # =========================================================
 
 @app.get("/")
 def root():
-    return {"message": "AI Resume Platform backend is running"}
-
+    return {"message": "AI Resume Studio API", "version": "3.0.0"}
 
 @app.get("/health")
 def health():
@@ -193,96 +138,180 @@ def health():
 
 
 # =========================================================
-# Frontend API Routes
+# Resume Upload
+# =========================================================
+
+@app.post("/api/resume/upload")
+async def resume_upload(file: UploadFile = File(...)):
+    resume_text = extract_text_from_upload(file)
+    if not resume_text:
+        raise HTTPException(status_code=422, detail="No text could be extracted from the file.")
+    parsed = parse_resume_text(resume_text)
+    return {"resumeText": resume_text, "parsedResume": parsed}
+
+
+# =========================================================
+# ATS Scan
 # =========================================================
 
 @app.post("/api/resume/scan")
 def resume_scan(data: ResumeScanRequest):
     job_description = data.jobDescription or ""
 
-    ats = calculate_ats_score(data.resumeText, job_description)
+    # Use Claude semantic scorer when a JD is provided; fall back to rule-based otherwise
+    if job_description.strip():
+        ats = semantic_ats_score(data.resumeText, job_description)
+    else:
+        ats = calculate_ats_score(data.resumeText, job_description)
+
     matched = ats.get("matched_keywords", [])
     missing = ats.get("missing_keywords", [])
-    category_scores = ats.get("category_scores", [])
-    parsed_resume = ats.get("parsed_resume", {})
-    match_intelligence = ats.get("match_intelligence", {})
 
     return {
         "overallScore": ats.get("ats_score", 0),
         "summary": "Resume scan completed successfully.",
         "previewText": data.resumeText,
-        "parsedResume": parsed_resume,
+        "parsedResume": ats.get("parsed_resume", {}),
         "matchedKeywords": matched,
         "missingKeywords": missing,
-        "categoryScores": category_scores,
+        "categoryScores": ats.get("category_scores", []),
+        "matchIntelligence": ats.get("match_intelligence", {}),
+        "strengths": ats.get("strengths", []),
+        "gaps": ats.get("gaps", []),
+        "recruiterVerdict": ats.get("recruiter_verdict", ""),
+        "semantic": ats.get("semantic", False),
         "issues": [
-            {
-                "id": f"missing-keyword-{index}",
-                "title": "Missing Keyword",
-                "description": keyword,
-                "severity": "medium",
-            }
-            for index, keyword in enumerate(missing, start=1)
+            {"id": f"missing-keyword-{i}", "title": "Missing Keyword", "description": kw, "severity": "medium"}
+            for i, kw in enumerate(missing, start=1)
         ],
-        "recommendations": [
-            f"Add or strengthen keyword: {keyword}"
-            for keyword in missing
-        ],
+        "recommendations": [f"Add or strengthen keyword: {kw}" for kw in missing],
     }
 
+
+# =========================================================
+# Resume Optimize
+# =========================================================
 
 @app.post("/api/resume/optimize")
 def resume_optimize(data: ResumeOptimizeRequest):
     job_description = data.jobDescription or ""
 
-    original_ats = calculate_ats_score(data.resumeText, job_description)
+    # Rule-based: extract missing keywords to guide the rewriter (fast, keyword-focused, no API cost)
+    rule_ats = calculate_ats_score(data.resumeText, job_description)
+    missing_keywords = rule_ats.get("missing_keywords", [])
 
-    optimized_resume_text = optimize_resume_text(
+    # Semantic: get the displayed "before" score — same model as the Scan tab for consistency
+    if job_description.strip():
+        original_ats = semantic_ats_score(data.resumeText, job_description)
+    else:
+        original_ats = rule_ats
+    original_score = original_ats.get("ats_score", 0)
+
+    # Rewrite the resume using Claude
+    optimized_text = optimize_resume_text(
         data.resumeText,
         job_description,
-        original_ats.get("missing_keywords", []),
-        original_score=original_ats.get("ats_score", 0),
+        missing_keywords,
+        original_score=original_score,
     )
 
-    improved_ats = calculate_ats_score(optimized_resume_text, job_description)
-
-    original_score = original_ats.get("ats_score", 0)
+    # Semantic: get the displayed "after" score — same model for apples-to-apples comparison
+    if job_description.strip():
+        improved_ats = semantic_ats_score(optimized_text, job_description)
+    else:
+        improved_ats = calculate_ats_score(optimized_text, job_description)
     improved_score = improved_ats.get("ats_score", 0)
 
-    if original_score < 60:
-        max_allowed_improvement = 15
-    elif original_score < 75:
-        max_allowed_improvement = 12
-    else:
-        max_allowed_improvement = 10
+    max_allowed = 15 if original_score < 60 else (12 if original_score < 75 else 10)
 
-    reverted_to_original = False
-
-    if improved_score - original_score > max_allowed_improvement:
-        optimized_resume_text = data.resumeText
+    # Only revert if score inflated unrealistically (anti-hallucination guard).
+    # Flat or slight improvements still show Claude's rewrite — it's linguistically better
+    # even when the score doesn't move.
+    if improved_score - original_score > max_allowed:
+        optimized_text = data.resumeText
         improved_ats = original_ats
-        reverted_to_original = True
+        improved_score = original_score
 
-    if improved_ats.get("ats_score", 0) < original_ats.get("ats_score", 0):
-        optimized_resume_text = data.resumeText
-        improved_ats = original_ats
-        reverted_to_original = True
-
-    final_score = improved_ats.get("ats_score", 0)
-
-    optimization_guidance = None
-    if reverted_to_original or final_score == original_score:
-        optimization_guidance = build_optimization_guidance(data.resumeText)
+    show_guidance = improved_score <= original_score
 
     return {
         "originalScore": original_score,
-        "optimizedScore": final_score,
-        "scoreImprovement": final_score - original_score,
+        "optimizedScore": improved_score,
+        "scoreImprovement": improved_score - original_score,
         "originalResumeText": data.resumeText,
-        "optimizedResumeText": optimized_resume_text,
-        "originalParsedResume": original_ats.get("parsed_resume", {}),
-        "optimizedParsedResume": improved_ats.get("parsed_resume", {}),
-        "missingKeywordsBefore": original_ats.get("missing_keywords", []),
+        "optimizedResumeText": optimized_text,
+        "missingKeywordsBefore": missing_keywords,
         "missingKeywordsAfter": improved_ats.get("missing_keywords", []),
-        "optimizationGuidance": optimization_guidance,
+        "matchIntelligence": improved_ats.get("match_intelligence", {}),
+        "optimizationGuidance": build_optimization_guidance(data.resumeText) if show_guidance else None,
     }
+
+
+# =========================================================
+# Cover Letter
+# =========================================================
+
+@app.post("/api/cover-letter/generate")
+def cover_letter_generate(data: CoverLetterRequest):
+    if not data.resumeText:
+        raise HTTPException(status_code=400, detail="Resume text is required.")
+    result = generate_cover_letter(
+        resume_text=data.resumeText,
+        job_description=data.jobDescription or "",
+        company_name=data.companyName or "",
+        candidate_name=data.candidateName or "",
+    )
+    if not result:
+        raise HTTPException(status_code=500, detail="Cover letter generation failed.")
+    return {"coverLetter": result}
+
+
+# =========================================================
+# LinkedIn
+# =========================================================
+
+@app.post("/api/linkedin/optimize")
+def linkedin_optimize(data: LinkedInRequest):
+    if not data.resumeText:
+        raise HTTPException(status_code=400, detail="Resume text is required.")
+    result = generate_linkedin_optimization(
+        resume_text=data.resumeText,
+        job_description=data.jobDescription or "",
+        target_role=data.targetRole or "",
+    )
+    return {"headline": result.get("headline", ""), "summary": result.get("summary", "")}
+
+
+# =========================================================
+# Payments
+# =========================================================
+
+STRIPE_MONTHLY_PRICE_ID = os.getenv("STRIPE_MONTHLY_PRICE_ID", "price_monthly_placeholder")
+STRIPE_ONETIME_PRICE_ID = os.getenv("STRIPE_ONETIME_PRICE_ID", "price_onetime_placeholder")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+
+@app.post("/api/payments/create-checkout-session")
+def create_checkout_session(plan: str = "monthly"):
+    if not stripe.api_key:
+        raise HTTPException(status_code=503, detail="Payment system not configured yet.")
+    price_id = STRIPE_MONTHLY_PRICE_ID if plan == "monthly" else STRIPE_ONETIME_PRICE_ID
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{"price": price_id, "quantity": 1}],
+            mode="subscription" if plan == "monthly" else "payment",
+            success_url=f"{FRONTEND_URL}/workspace?upgrade=success",
+            cancel_url=f"{FRONTEND_URL}/pricing",
+        )
+        return {"url": session.url}
+    except stripe.StripeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/user/pro-status")
+def pro_status():
+    # FORCE_PRO=true in your .env lets you test pro features locally without Stripe.
+    # Replace with a real Supabase subscription check when auth is wired.
+    force_pro = os.getenv("FORCE_PRO", "").lower() in ("true", "1", "yes")
+    return {"isPro": force_pro}
