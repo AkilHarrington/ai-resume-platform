@@ -33,6 +33,7 @@ from services.resume_service import (
     stream_cover_letter,
     stream_linkedin_optimization,
 )
+from services.pdf_service import generate_resume_pdf, generate_cover_letter_pdf
 from services.resume_parser import parse_resume_text
 from services.supabase_service import (
     get_user_by_email,
@@ -541,6 +542,64 @@ async def linkedin_stream(request: Request, data: LinkedInRequest, user: dict = 
         generate(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# =========================================================
+# PDF Download — Resume (Pro) + Cover Letter (Pro)
+# sync def: PDF generation is CPU-bound, runs in thread pool
+# =========================================================
+
+from fastapi.responses import Response as FastAPIResponse
+from pydantic import BaseModel
+
+class ResumePdfRequest(BaseModel):
+    resumeText: str
+    template: str = "professional"
+
+class CoverLetterPdfRequest(BaseModel):
+    coverLetterText: str
+    companyName: str = ""
+
+
+@app.post("/api/resume/download-pdf")
+@limiter.limit("10/minute")
+def resume_download_pdf(request: Request, data: ResumePdfRequest, user: dict = Depends(require_pro)):
+    if not data.resumeText.strip():
+        raise HTTPException(status_code=400, detail="Resume text is required.")
+    template = data.template.lower().strip()
+    if template not in ("professional", "modern", "executive"):
+        template = "professional"
+    resume_data = parse_resume_text(data.resumeText)
+    try:
+        pdf_bytes = generate_resume_pdf(resume_data, template)
+    except Exception as e:
+        logger.error("PDF generation failed: %s", e)
+        raise HTTPException(status_code=500, detail="PDF generation failed. Please try again.")
+    filename = f"resume-{template}.pdf"
+    return FastAPIResponse(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/cover-letter/download-pdf")
+@limiter.limit("10/minute")
+def cover_letter_download_pdf(request: Request, data: CoverLetterPdfRequest, user: dict = Depends(require_pro)):
+    if not data.coverLetterText.strip():
+        raise HTTPException(status_code=400, detail="Cover letter text is required.")
+    try:
+        pdf_bytes = generate_cover_letter_pdf(data.coverLetterText, data.companyName)
+    except Exception as e:
+        logger.error("Cover letter PDF generation failed: %s", e)
+        raise HTTPException(status_code=500, detail="PDF generation failed. Please try again.")
+    slug = data.companyName.lower().replace(" ", "-") if data.companyName else "cover-letter"
+    filename = f"cover-letter-{slug}.pdf"
+    return FastAPIResponse(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

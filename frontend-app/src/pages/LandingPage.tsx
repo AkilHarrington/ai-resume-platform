@@ -12,9 +12,9 @@ const features = [
 ]
 
 const stats = [
-  { value: '96%', label: 'Average ATS score improvement' },
-  { value: '3x', label: 'More interview callbacks' },
-  { value: '< 30s', label: 'Time to get your score' },
+  { value: '6', label: 'ATS dimensions scored by Claude AI' },
+  { value: '< 30s', label: 'Time to get your full score breakdown' },
+  { value: '3', label: 'Pro PDF templates, ready to download' },
 ]
 
 const plans = [
@@ -55,7 +55,7 @@ export function LandingPage() {
         display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', height: 60,
       }}>
-        <Logo size="sm" />
+        <Logo size="sm" linkToHome={false} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {!isMobile && <Button variant="ghost" size="sm" onClick={() => navigate('/pricing')}>Pricing</Button>}
           <Button variant="outline" size="sm" onClick={() => navigate(user ? '/workspace' : '/login')}>Sign In</Button>

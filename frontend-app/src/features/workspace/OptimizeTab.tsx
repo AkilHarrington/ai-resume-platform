@@ -1,14 +1,13 @@
 import { useState, useMemo } from 'react'
-import { pdf, BlobProvider } from '@react-pdf/renderer'
 import { Button } from '../../components/Button'
 import { ScoreRing } from '../../components/ScoreRing'
 import { LoadingCard, EmptyState, EmptyCard } from './shared'
-import { ResumePDF } from '../resume-templates/renderers/ResumePDF'
-import { parseResumeText } from '../resume-templates/utils/parseResumeText'
-import { templateConfigMap } from '../resume-templates/config'
 import { useToast } from '../../components/Toast'
+import { useAuth } from '../../app/AuthContext'
 import type { OptimizeResult } from '../../api/resumeApi'
 import type { ResumeTemplate } from '../../types/resumeTemplate'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 // ─── Score percentile helper ──────────────────────────────────────────────────
 
@@ -148,14 +147,10 @@ interface Props {
 export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Props) {
   // All hooks unconditionally at the top
   const { showToast } = useToast()
+  const { session } = useAuth()
   const [view, setView] = useState<'optimized' | 'original' | 'changes'>('optimized')
   const [selectedTemplate, setSelectedTemplate] = useState<ResumeTemplate>('professional')
   const [isDownloading, setIsDownloading] = useState(false)
-
-  const parsedResume = useMemo(
-    () => result?.optimizedResumeText ? parseResumeText(result.optimizedResumeText) : null,
-    [result?.optimizedResumeText],
-  )
 
   // Compute added keywords: present in missingBefore but absent from missingAfter → integrated
   const addedKeywords = useMemo(() => {
@@ -189,8 +184,24 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
     if (!result?.optimizedResumeText) return
     setIsDownloading(true)
     try {
-      const resumeData = parseResumeText(result.optimizedResumeText)
-      const blob = await pdf(<ResumePDF resume={resumeData} template={templateConfigMap[selectedTemplate]} />).toBlob()
+      const token = session?.access_token
+      if (!token) throw new Error('Not authenticated')
+      const resp = await fetch(`${API_BASE}/api/resume/download-pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          resumeText: result.optimizedResumeText,
+          template: selectedTemplate,
+        }),
+      })
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}))
+        throw new Error(detail?.detail ?? `Server error ${resp.status}`)
+      }
+      const blob = await resp.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -198,8 +209,9 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
       a.click()
       URL.revokeObjectURL(url)
       showToast('PDF downloaded successfully')
-    } catch {
-      showToast('PDF generation failed. Try again.', 'error')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'PDF generation failed.'
+      showToast(msg, 'error')
     } finally {
       setIsDownloading(false)
     }
@@ -428,33 +440,14 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
             })}
           </div>
 
-          {/* Live PDF Preview */}
-          {parsedResume && (
-            <BlobProvider
-              key={selectedTemplate}
-              document={<ResumePDF resume={parsedResume} template={templateConfigMap[selectedTemplate]} />}
-            >
-              {({ url, loading, error: pdfError }) => (
-                <div style={{
-                  marginBottom: 16, borderRadius: 'var(--radius)', overflow: 'hidden',
-                  border: '1px solid var(--gray-200)', background: 'var(--gray-50)',
-                  minHeight: 520, position: 'relative',
-                }}>
-                  {loading ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 520, gap: 12, color: 'var(--gray-400)', fontSize: 13 }}>
-                      <div style={{ fontSize: 22 }}>⏳</div>Rendering preview…
-                    </div>
-                  ) : pdfError ? (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 520, color: 'var(--danger)', fontSize: 13 }}>
-                      Preview unavailable
-                    </div>
-                  ) : url ? (
-                    <iframe src={url} width="100%" height="520" style={{ border: 'none', display: 'block' }} title="Resume Preview" />
-                  ) : null}
-                </div>
-              )}
-            </BlobProvider>
-          )}
+          {/* Template note */}
+          <div style={{
+            marginBottom: 16, padding: '12px 16px',
+            background: 'var(--gray-50)', borderRadius: 'var(--radius)',
+            border: '1px solid var(--gray-200)', fontSize: 13, color: 'var(--gray-500)',
+          }}>
+            📄 Select a template above, then click Download PDF — your optimized resume will be generated server-side and downloaded instantly.
+          </div>
 
           <Button size="md" variant="secondary" onClick={handleDownloadPDF} disabled={isDownloading} style={{ minWidth: 180 }}>
             {isDownloading ? '⏳ Generating PDF...' : '⬇️ Download PDF'}

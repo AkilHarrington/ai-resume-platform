@@ -87,6 +87,31 @@ def looks_like_date_range(text: str) -> bool:
     return bool(re.search(r"\b(19|20)\d{2}\b", text))
 
 
+_MONTH = r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+_YEAR  = r"(?:19|20)\d{2}"
+
+
+def _extract_trailing_date(text: str):
+    """
+    If text ends with an inline date range such as
+    "Apex Financial Technologies | San Francisco, CA | Mar 2021 – Present",
+    return (cleaned_company, start_date, end_date).
+    Returns (text, None, None) when no trailing date is found.
+    """
+    pattern = re.compile(
+        rf"(?:[|,]\s*)?({_MONTH}\s+{_YEAR}|{_YEAR})"   # start
+        rf"\s*[–\-—]\s*"
+        rf"(Present|Current|{_MONTH}\s+{_YEAR}|{_YEAR})"  # end
+        rf"\s*$",
+        re.IGNORECASE,
+    )
+    m = pattern.search(text)
+    if m:
+        cleaned = text[: m.start()].rstrip(" |,–—-").strip()
+        return cleaned, m.group(1).strip(), m.group(2).strip()
+    return text, None, None
+
+
 def is_bullet(text: str) -> bool:
     return text.startswith("•") or text.startswith("-")
 
@@ -111,7 +136,21 @@ def looks_like_action_line(text: str) -> bool:
 
 
 def looks_like_company_title_inline(text: str) -> bool:
-    return " — " in text or " – " in text or " - " in text
+    """
+    True only when a separator splits a genuine company–title pair.
+    A line like "Acme Corp | San Jose | Mar 2021 – Present" should NOT match —
+    the part after " – " is a date, not a title.
+    """
+    for sep in (" — ", " – ", " - "):
+        if sep in text:
+            after = text.split(sep, 1)[1].strip()
+            # Reject if the right-hand side is a date string or temporal keyword
+            if after.lower() in ("present", "current", "now"):
+                return False
+            if looks_like_date_range(after):
+                return False
+            return True
+    return False
 
 
 def split_company_title_inline(text: str) -> tuple[str, str]:
@@ -257,7 +296,7 @@ def parse_resume_text(resume_text: str) -> Dict:
             next_line = lines[index + 1] if index + 1 < len(lines) else None
             next_next_line = lines[index + 2] if index + 2 < len(lines) else None
 
-            # Standard company then title layout
+            # Standard layout: company then title (title line has no year in it)
             if (
                 next_line
                 and detect_section_key(next_line) is None
@@ -267,18 +306,44 @@ def parse_resume_text(resume_text: str) -> Dict:
             ):
                 title = next_line
 
-            if next_next_line and looks_like_date_range(next_next_line):
-                date_text = next_next_line
-                if "–" in date_text:
-                    parts = [part.strip() for part in date_text.split("–", 1)]
-                    start_date = parts[0] if parts else None
-                    end_date = parts[1] if len(parts) > 1 else None
-                elif "-" in date_text:
-                    parts = [part.strip() for part in date_text.split("-", 1)]
-                    start_date = parts[0] if parts else None
-                    end_date = parts[1] if len(parts) > 1 else None
+            elif (
+                next_line
+                and detect_section_key(next_line) is None
+                and not is_bullet(next_line)
+                and not looks_like_action_line(next_line)
+                and looks_like_date_range(next_line)
+            ):
+                # next_line contains a year — could be:
+                #   (a) Title-first layout: "Company | City | Mar 2021 – Present"
+                #       → current line is the title; next_line is company + date
+                #   (b) Pure date line: "Mar 2021 – Present"
+                #       → current line is the company; next_line gives the dates
+                cleaned, inline_start, inline_end = _extract_trailing_date(next_line)
+                if cleaned and len(cleaned.replace("|", "").strip()) > 3:
+                    # (a) Title-first: swap company ↔ title, pull dates from next_line
+                    title = company
+                    company = cleaned
+                    start_date = inline_start
+                    end_date = inline_end
                 else:
-                    start_date = date_text
+                    # (b) Pure date line
+                    start_date = inline_start
+                    end_date = inline_end
+
+            # Fall through: if dates still not set, check next_next_line
+            if not start_date and not end_date:
+                if next_next_line and looks_like_date_range(next_next_line):
+                    date_text = next_next_line
+                    if "–" in date_text:
+                        parts = [part.strip() for part in date_text.split("–", 1)]
+                        start_date = parts[0] if parts else None
+                        end_date = parts[1] if len(parts) > 1 else None
+                    elif "-" in date_text:
+                        parts = [part.strip() for part in date_text.split("-", 1)]
+                        start_date = parts[0] if parts else None
+                        end_date = parts[1] if len(parts) > 1 else None
+                    else:
+                        start_date = date_text
 
             current_experience = {
                 "company": company,
@@ -292,7 +357,7 @@ def parse_resume_text(resume_text: str) -> Dict:
             index += 1
             if title:
                 index += 1
-            if next_next_line and looks_like_date_range(next_next_line):
+            if next_next_line and looks_like_date_range(next_next_line) and not start_date:
                 index += 1
             continue
 

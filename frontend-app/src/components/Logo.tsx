@@ -1,15 +1,20 @@
+import { useNavigate } from 'react-router-dom'
+
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg'
   variant?: 'light' | 'dark'
+  /** Set to false on the landing page itself to avoid a no-op click */
+  linkToHome?: boolean
 }
 
-export function Logo({ size = 'md', variant = 'dark' }: LogoProps) {
+export function Logo({ size = 'md', variant = 'dark', linkToHome = true }: LogoProps) {
   const sizes = { sm: { icon: 28, text: 16 }, md: { icon: 36, text: 20 }, lg: { icon: 48, text: 26 } }
   const s = sizes[size]
   const textColor = variant === 'light' ? '#FFFFFF' : '#1A365D'
   const accentColor = '#2F855A'
+  const navigate = useNavigate()
 
-  return (
+  const inner = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <svg width={s.icon} height={s.icon} viewBox="0 0 36 36" fill="none">
         <rect width="36" height="36" rx="9" fill="#1A365D" />
@@ -29,5 +34,17 @@ export function Logo({ size = 'md', variant = 'dark' }: LogoProps) {
         </span>
       </div>
     </div>
+  )
+
+  if (!linkToHome) return inner
+
+  return (
+    <button
+      onClick={() => navigate('/')}
+      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex' }}
+      aria-label="Go to homepage"
+    >
+      {inner}
+    </button>
   )
 }

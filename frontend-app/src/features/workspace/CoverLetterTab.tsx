@@ -1,5 +1,9 @@
+import { useState } from 'react'
 import { Button } from '../../components/Button'
 import { LoadingCard, EmptyState, EmptyCard } from './shared'
+import { useAuth } from '../../app/AuthContext'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 interface Props {
   result: string
@@ -12,18 +16,48 @@ interface Props {
   error: string
 }
 
-function downloadCoverLetter(text: string, company: string) {
-  const filename = company ? `cover-letter-${company.toLowerCase().replace(/\s+/g, '-')}.txt` : 'cover-letter.txt'
-  const blob = new Blob([text], { type: 'text/plain' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
+// ── Tab component ─────────────────────────────────────────────────────────────
 export function CoverLetterTab({ result, isLoading, isStreaming, hasResume, companyName, setCompanyName, onRun, error }: Props) {
+  const { session } = useAuth()
+  const [isDownloading, setIsDownloading] = useState(false)
+
+  const handleDownload = async () => {
+    if (!result) return
+    setIsDownloading(true)
+    try {
+      const token = session?.access_token
+      if (!token) throw new Error('Not authenticated')
+      const resp = await fetch(`${API_BASE}/api/cover-letter/download-pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          coverLetterText: result,
+          companyName: companyName || '',
+        }),
+      })
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}))
+        throw new Error(detail?.detail ?? `Server error ${resp.status}`)
+      }
+      const blob = await resp.blob()
+      const slug = companyName ? companyName.toLowerCase().replace(/\s+/g, '-') : 'cover-letter'
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `cover-letter-${slug}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'PDF download failed.'
+      alert(msg)
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   if (isLoading) return <LoadingCard message="Claude is writing your cover letter..." />
   if (!result) return (
     <EmptyCard>
@@ -56,7 +90,9 @@ export function CoverLetterTab({ result, isLoading, isStreaming, hasResume, comp
             </span>
           )}
           <Button size="sm" variant="outline" disabled={isStreaming} onClick={() => navigator.clipboard.writeText(result)}>📋 Copy</Button>
-          <Button size="sm" variant="outline" disabled={isStreaming} onClick={() => downloadCoverLetter(result, companyName)}>⬇️ Download</Button>
+          <Button size="sm" variant="outline" disabled={isStreaming || isDownloading} onClick={handleDownload}>
+            {isDownloading ? 'Saving…' : '⬇️ Download PDF'}
+          </Button>
           <Button size="sm" variant="secondary" disabled={isStreaming} onClick={onRun}>Regenerate</Button>
         </div>
       </div>
