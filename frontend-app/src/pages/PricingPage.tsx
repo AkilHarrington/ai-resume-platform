@@ -4,12 +4,13 @@ import { useMutation } from '@tanstack/react-query'
 import { Logo } from '../components/Logo'
 import { Button } from '../components/Button'
 import { createCheckoutSession } from '../api/resumeApi'
+import { useAuth } from '../app/AuthContext'
 
 const features = [
   { label: 'ATS scan & score', free: true, pro: true },
   { label: 'Keyword gap analysis', free: true, pro: true },
   { label: 'Score breakdown by category', free: true, pro: true },
-  { label: 'Match intelligence report', free: true, pro: true },
+  { label: 'Match intelligence report', free: false, pro: true },
   { label: 'AI resume optimization', free: false, pro: true },
   { label: 'Cover letter generator', free: false, pro: true },
   { label: 'LinkedIn headline + summary', free: false, pro: true },
@@ -20,6 +21,7 @@ const features = [
 
 export function PricingPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [billing, setBilling] = useState<'monthly' | 'onetime'>('monthly')
 
   const checkoutMutation = useMutation({
@@ -74,7 +76,7 @@ export function PricingPage() {
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Free</div>
             <div style={{ fontSize: 48, fontWeight: 900, color: 'var(--navy)', lineHeight: 1, marginBottom: 6 }}>$0</div>
             <div style={{ fontSize: 14, color: 'var(--gray-400)', marginBottom: 28 }}>forever</div>
-            <Button fullWidth variant="outline" onClick={() => navigate('/workspace')} style={{ marginBottom: 28, borderColor: 'var(--navy)', color: 'var(--navy)' }}>
+            <Button fullWidth variant="outline" onClick={() => navigate(user ? '/workspace' : '/signup')} style={{ marginBottom: 28, borderColor: 'var(--navy)', color: 'var(--navy)' }}>
               Start Free Scan
             </Button>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -129,7 +131,7 @@ export function PricingPage() {
           <h2 style={{ fontSize: 22, fontWeight: 800, color: 'var(--navy)', marginBottom: 28 }}>Common questions</h2>
           {[
             { q: 'What\'s the difference between monthly and one-time?', a: 'Monthly gives you full access for $19/month, cancel anytime. One-time is a single $49 payment for lifetime Pro access — no recurring charges.' },
-            { q: 'Does the free plan require a credit card?', a: 'No. The free ATS scan works instantly with no account or payment required.' },
+            { q: 'Does the free plan require a credit card?', a: 'No credit card required. You\'ll need a free account to get started — sign up takes less than 30 seconds.' },
             { q: 'How does the AI optimization work?', a: 'Claude analyzes your resume against the job description, identifies keyword gaps, and rewrites your content to improve ATS alignment — without fabricating your experience or changing facts.' },
             { q: 'What file formats can I upload?', a: 'PDF, DOCX, and plain text files are all supported.' },
           ].map(({ q, a }) => (

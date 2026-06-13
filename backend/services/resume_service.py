@@ -8,6 +8,8 @@ import os
 
 import anthropic
 
+from services.exceptions import AIUnavailableError
+
 
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
 
@@ -116,6 +118,14 @@ def optimize_resume_text(
             messages=[{"role": "user", "content": prompt}],
         )
         text_output = response.content[0].text.strip()
+    except anthropic.AuthenticationError:
+        raise AIUnavailableError("Invalid Anthropic API key. Check your ANTHROPIC_API_KEY.")
+    except anthropic.RateLimitError:
+        raise AIUnavailableError("Anthropic rate limit reached. Please wait a moment and try again.")
+    except anthropic.APIStatusError as e:
+        raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}). Please try again shortly.")
+    except anthropic.APIConnectionError:
+        raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
     except Exception:
         return resume_text
 
@@ -192,6 +202,14 @@ Write the cover letter now:"""
             messages=[{"role": "user", "content": prompt}],
         )
         return response.content[0].text.strip()
+    except anthropic.AuthenticationError:
+        raise AIUnavailableError("Invalid Anthropic API key. Check your ANTHROPIC_API_KEY.")
+    except anthropic.RateLimitError:
+        raise AIUnavailableError("Anthropic rate limit reached. Please wait a moment and try again.")
+    except anthropic.APIStatusError as e:
+        raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}). Please try again shortly.")
+    except anthropic.APIConnectionError:
+        raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
     except Exception:
         return ""
 
@@ -248,5 +266,13 @@ Return only the headline and summary in the format above."""
             summary = text
 
         return {"headline": headline, "summary": summary}
+    except anthropic.AuthenticationError:
+        raise AIUnavailableError("Invalid Anthropic API key. Check your ANTHROPIC_API_KEY.")
+    except anthropic.RateLimitError:
+        raise AIUnavailableError("Anthropic rate limit reached. Please wait a moment and try again.")
+    except anthropic.APIStatusError as e:
+        raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}). Please try again shortly.")
+    except anthropic.APIConnectionError:
+        raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
     except Exception:
         return {"headline": "", "summary": ""}

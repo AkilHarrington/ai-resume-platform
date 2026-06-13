@@ -12,6 +12,8 @@ import re
 
 import anthropic
 
+from services.exceptions import AIUnavailableError
+
 
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
 
@@ -107,7 +109,17 @@ def semantic_ats_score(resume_text: str, job_description: str) -> dict:
 
         data = json.loads(raw)
 
-    except (json.JSONDecodeError, Exception):
+    except anthropic.AuthenticationError:
+        raise AIUnavailableError("Invalid Anthropic API key. Check your ANTHROPIC_API_KEY.")
+    except anthropic.RateLimitError:
+        raise AIUnavailableError("Anthropic rate limit reached. Please wait a moment and try again.")
+    except anthropic.APIStatusError as e:
+        raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}). Please try again shortly.")
+    except anthropic.APIConnectionError:
+        raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
+    except json.JSONDecodeError:
+        return _fallback_response()
+    except Exception:
         return _fallback_response()
 
     # Validate and re-compute overall score from dimensions for consistency

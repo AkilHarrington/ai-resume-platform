@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { Logo } from '../components/Logo'
 import { Button } from '../components/Button'
+import { useAuth } from '../app/AuthContext'
 
 const features = [
   { icon: '🎯', title: 'Instant ATS Scan', desc: 'Get your ATS compatibility score in seconds. See exactly what keywords you\'re missing.' },
@@ -37,6 +38,8 @@ const plans = [
 
 export function LandingPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const goToApp = () => navigate(user ? '/workspace' : '/signup')
 
   return (
     <div style={{ fontFamily: 'var(--font-sans)', color: 'var(--charcoal)' }}>
@@ -51,8 +54,8 @@ export function LandingPage() {
         <Logo size="sm" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Button variant="ghost" size="sm" onClick={() => navigate('/pricing')}>Pricing</Button>
-          <Button variant="outline" size="sm" onClick={() => navigate('/workspace')}>Sign In</Button>
-          <Button variant="primary" size="sm" onClick={() => navigate('/workspace')}>Get Started Free</Button>
+          <Button variant="outline" size="sm" onClick={() => navigate(user ? '/workspace' : '/login')}>Sign In</Button>
+          <Button variant="primary" size="sm" onClick={goToApp}>Get Started Free</Button>
         </div>
       </nav>
 
@@ -93,7 +96,7 @@ export function LandingPage() {
           </p>
 
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Button size="lg" variant="primary" onClick={() => navigate('/workspace')}
+            <Button size="lg" variant="primary" onClick={goToApp}
               style={{ background: 'var(--emerald)', borderColor: 'var(--emerald)', fontSize: 16, padding: '14px 32px' }}>
               Scan My Resume Free →
             </Button>
@@ -194,7 +197,7 @@ export function LandingPage() {
                 <Button
                   fullWidth
                   variant={plan.highlight ? 'primary' : 'outline'}
-                  onClick={() => navigate('/workspace')}
+                  onClick={goToApp}
                   style={plan.highlight ? {} : { borderColor: 'var(--navy)', color: 'var(--navy)' }}
                 >
                   {plan.cta}
@@ -216,7 +219,7 @@ export function LandingPage() {
         <p style={{ color: 'rgba(255,255,255,0.8)', marginBottom: 32, fontSize: 16 }}>
           Scan your resume for free — no account required.
         </p>
-        <Button size="lg" variant="secondary" onClick={() => navigate('/workspace')}
+        <Button size="lg" variant="secondary" onClick={goToApp}
           style={{ background: 'white', color: 'var(--emerald)', borderColor: 'white', fontSize: 16, padding: '14px 36px' }}>
           Start Free Scan →
         </Button>

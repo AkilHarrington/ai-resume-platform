@@ -1,10 +1,20 @@
 import axios from 'axios'
+import { supabase } from '../services/supabase'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000, // 60s — Claude calls can take 15-25s on complex resumes
+})
+
+// Attach the Supabase JWT to every request automatically
+api.interceptors.request.use(async (config) => {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (session?.access_token) {
+    config.headers.Authorization = `Bearer ${session.access_token}`
+  }
+  return config
 })
 
 api.interceptors.response.use(
@@ -14,6 +24,15 @@ api.interceptors.response.use(
       return Promise.reject(
         new Error('Request timed out. Claude is processing — please try again.')
       )
+    }
+    if (error.response?.status === 401) {
+      return Promise.reject(new Error('Session expired. Please sign in again.'))
+    }
+    if (error.response?.status === 403) {
+      return Promise.reject(new Error('This feature requires a Pro plan.'))
+    }
+    if (error.response?.status === 429) {
+      return Promise.reject(new Error('Too many requests. Please wait a moment and try again.'))
     }
     return Promise.reject(error)
   }
@@ -74,6 +93,7 @@ export async function uploadResume(file: File): Promise<UploadResult> {
   return data
 }
 
+// user_id params removed — backend now extracts user from the verified JWT
 export async function scanResume(resumeText: string, jobDescription?: string): Promise<ScanResult> {
   const { data } = await api.post<ScanResult>('/api/resume/scan', { resumeText, jobDescription })
   return data
@@ -108,8 +128,7 @@ export async function createCheckoutSession(plan: 'monthly' | 'onetime'): Promis
   return data
 }
 
-export async function getProStatus(userId?: string): Promise<{ isPro: boolean }> {
-  const params = userId ? `?user_id=${userId}` : ''
-  const { data } = await api.get<{ isPro: boolean }>(`/api/user/pro-status${params}`)
+export async function getProStatus(): Promise<{ isPro: boolean }> {
+  const { data } = await api.get<{ isPro: boolean }>('/api/user/pro-status')
   return data
 }

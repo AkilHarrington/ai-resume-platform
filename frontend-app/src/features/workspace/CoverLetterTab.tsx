@@ -1,0 +1,53 @@
+import { Button } from '../../components/Button'
+import { LoadingCard, EmptyState, EmptyCard } from './shared'
+
+interface Props {
+  result: string
+  isLoading: boolean
+  hasResume: boolean
+  companyName: string
+  setCompanyName: (v: string) => void
+  onRun: () => void
+  error: string
+}
+
+export function CoverLetterTab({ result, isLoading, hasResume, companyName, setCompanyName, onRun, error }: Props) {
+  if (isLoading) return <LoadingCard message="Claude is writing your cover letter..." />
+  if (!result) return (
+    <EmptyCard>
+      <EmptyState icon="📝" title="Cover Letter Generator" subtitle="Claude writes a tailored, professional cover letter based on your resume and the job description." />
+      <div style={{ marginTop: 16 }}>
+        <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--gray-600)', display: 'block', marginBottom: 6 }}>Company Name (optional)</label>
+        <input
+          value={companyName}
+          onChange={e => setCompanyName(e.target.value)}
+          placeholder="e.g. Google, Stripe, Acme Corp"
+          style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 12 }}
+        />
+        <Button fullWidth size="lg" variant="secondary" disabled={!hasResume} onClick={onRun}>
+          📝 Generate Cover Letter
+        </Button>
+        {error && <p style={{ color: 'var(--danger)', fontSize: 13, textAlign: 'center', marginTop: 8 }}>{error}</p>}
+      </div>
+    </EmptyCard>
+  )
+
+  return (
+    <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 28, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)', animation: 'fadeIn 0.3s ease' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--navy)' }}>Your Cover Letter</h2>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(result)}>📋 Copy</Button>
+          <Button size="sm" variant="secondary" onClick={onRun}>Regenerate</Button>
+        </div>
+      </div>
+      <div style={{
+        background: 'var(--gray-50)', borderRadius: 'var(--radius)', padding: '24px 28px',
+        fontSize: 14, lineHeight: 1.8, color: 'var(--charcoal)', whiteSpace: 'pre-wrap',
+        maxHeight: 560, overflow: 'auto',
+      }}>
+        {result}
+      </div>
+    </div>
+  )
+}
