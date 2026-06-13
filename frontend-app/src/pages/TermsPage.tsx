@@ -14,13 +14,13 @@ function Section({ title, children }: SectionProps) {
   return (
     <section style={{ marginBottom: 40 }}>
       <h2 style={{
-        fontSize: 18, fontWeight: 800, color: 'var(--navy)',
+        fontSize: 18, fontWeight: 800, color: 'var(--text-heading)',
         marginBottom: 12, paddingBottom: 10,
         borderBottom: '2px solid var(--gray-100)',
       }}>
         {title}
       </h2>
-      <div style={{ fontSize: 15, color: 'var(--charcoal)', lineHeight: 1.8 }}>
+      <div style={{ fontSize: 15, color: 'var(--text-primary)', lineHeight: 1.8 }}>
         {children}
       </div>
     </section>
@@ -46,10 +46,10 @@ export function TermsPage() {
   const isMobile = useIsMobile()
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--gray-50)', fontFamily: 'var(--font-sans)' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--surface-page)', fontFamily: 'var(--font-sans)' }}>
       {/* Nav */}
       <nav style={{
-        background: 'white', borderBottom: '1px solid var(--gray-100)',
+        background: 'var(--surface-0)', borderBottom: '1px solid var(--border)',
         padding: '0 24px', height: 64, display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100,
         boxShadow: 'var(--shadow-sm)',
@@ -58,7 +58,7 @@ export function TermsPage() {
         <button
           onClick={() => navigate(-1)}
           style={{
-            fontSize: 13, color: 'var(--gray-500)', fontWeight: 600,
+            fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600,
             cursor: 'pointer', border: 'none', background: 'none',
             display: 'flex', alignItems: 'center', gap: 6,
           }}
@@ -76,18 +76,18 @@ export function TermsPage() {
         <div style={{ marginBottom: 40 }}>
           <h1 style={{
             fontSize: isMobile ? 28 : 36, fontWeight: 900,
-            color: 'var(--navy)', letterSpacing: '-0.02em', marginBottom: 8,
+            color: 'var(--text-heading)', letterSpacing: '-0.02em', marginBottom: 8,
           }}>
             Terms of Service
           </h1>
-          <p style={{ fontSize: 14, color: 'var(--gray-400)' }}>
+          <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
             Last updated: {LAST_UPDATED}
           </p>
           <div style={{
             marginTop: 20, padding: '14px 18px',
             background: '#EFF6FF', borderRadius: 'var(--radius)',
             border: '1px solid #BFDBFE',
-            fontSize: 14, color: 'var(--charcoal)', lineHeight: 1.6,
+            fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.6,
           }}>
             <strong>The short version:</strong> Use the Service honestly, pay for Pro features if
             you want them, don't upload other people's resumes without their consent, and understand
@@ -148,9 +148,9 @@ export function TermsPage() {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, marginBottom: 16 }}>
               <thead>
-                <tr style={{ background: 'var(--gray-50)', textAlign: 'left' }}>
+                <tr style={{ background: 'var(--surface-page)', textAlign: 'left' }}>
                   {['Plan', 'Price', 'Features'].map(h => (
-                    <th key={h} style={{ padding: '10px 14px', fontWeight: 700, color: 'var(--navy)', borderBottom: '2px solid var(--gray-200)' }}>{h}</th>
+                    <th key={h} style={{ padding: '10px 14px', fontWeight: 700, color: 'var(--text-heading)', borderBottom: '2px solid var(--gray-200)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -160,10 +160,10 @@ export function TermsPage() {
                   ['Pro Monthly', '$19 / month', 'Everything free + AI optimization, cover letter, LinkedIn, PDF download'],
                   ['Pro One-Time', '$49 lifetime', 'All Pro features, no recurring charge'],
                 ].map(([plan, price, features], i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid var(--gray-100)' }}>
+                  <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '10px 14px', fontWeight: 600 }}>{plan}</td>
-                    <td style={{ padding: '10px 14px', color: 'var(--gray-600)' }}>{price}</td>
-                    <td style={{ padding: '10px 14px', color: 'var(--gray-600)' }}>{features}</td>
+                    <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>{price}</td>
+                    <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>{features}</td>
                   </tr>
                 ))}
               </tbody>
@@ -247,7 +247,7 @@ export function TermsPage() {
             Your use of the Service is also governed by our{' '}
             <span
               onClick={() => window.location.href = '/privacy'}
-              style={{ color: 'var(--navy)', fontWeight: 600, cursor: 'pointer' }}
+              style={{ color: 'var(--text-heading)', fontWeight: 600, cursor: 'pointer' }}
             >
               Privacy Policy
             </span>
@@ -332,14 +332,14 @@ export function TermsPage() {
             Questions about these Terms? Contact us:
           </P>
           <div style={{
-            background: 'white', borderRadius: 'var(--radius)', padding: '20px 24px',
-            border: '1px solid var(--gray-100)', boxShadow: 'var(--shadow-sm)',
+            background: 'var(--surface-0)', borderRadius: 'var(--radius)', padding: '20px 24px',
+            border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)',
           }}>
-            <p style={{ fontWeight: 700, color: 'var(--navy)', marginBottom: 6 }}>AI Resume Studio</p>
-            <p style={{ color: 'var(--gray-600)', fontSize: 14, lineHeight: 1.7 }}>
+            <p style={{ fontWeight: 700, color: 'var(--text-heading)', marginBottom: 6 }}>AI Resume Studio</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.7 }}>
               Trinidad and Tobago<br />
               Email:{' '}
-              <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--navy)', fontWeight: 600 }}>
+              <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--text-heading)', fontWeight: 600 }}>
                 {CONTACT_EMAIL}
               </a>
             </p>

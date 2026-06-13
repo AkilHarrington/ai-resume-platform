@@ -13,6 +13,7 @@ import { CoverLetterTab } from '../features/workspace/CoverLetterTab'
 import { LinkedInTab } from '../features/workspace/LinkedInTab'
 import { UpgradePrompt } from '../features/workspace/shared'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useTheme } from '../app/ThemeContext'
 import {
   uploadResume, scanResume, optimizeResume,
   streamCoverLetter, streamLinkedIn, getProStatus,
@@ -33,6 +34,7 @@ export function WorkspacePage() {
   const { user, signOut, loading } = useAuth()
   const isMobile = useIsMobile()
   const { showToast } = useToast()
+  const { theme, toggleTheme } = useTheme()
 
   // All hooks must be declared before any conditional return (Rules of Hooks).
   // The redirect lives in useEffect so hooks are always called in the same order.
@@ -161,15 +163,15 @@ export function WorkspacePage() {
           onClick={() => setInputExpanded(v => !v)}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            background: 'white', border: '1px solid var(--gray-100)', borderRadius: 'var(--radius-lg)',
+            background: 'var(--surface-0)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
             padding: '12px 16px', cursor: 'pointer', width: '100%',
             boxShadow: 'var(--shadow-sm)',
           }}
         >
-          <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--navy)' }}>
+          <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-heading)' }}>
             {resumeText ? `📄 Resume loaded (${resumeText.split(/\s+/).length} words)` : '📄 Upload your resume'}
           </span>
-          <span style={{ color: 'var(--gray-400)', fontSize: 18, lineHeight: 1 }}>{inputExpanded ? '▲' : '▼'}</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 18, lineHeight: 1 }}>{inputExpanded ? '▲' : '▼'}</span>
         </button>
       )}
 
@@ -177,8 +179,8 @@ export function WorkspacePage() {
       {(!isMobile || inputExpanded) && (
         <>
           {/* Upload Zone */}
-          <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--gray-600)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 10 }}>
+          <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 10 }}>
               Your Resume
             </label>
             <div
@@ -186,35 +188,35 @@ export function WorkspacePage() {
               style={{
                 border: `2px dashed ${isDragActive ? 'var(--emerald)' : 'var(--gray-200)'}`,
                 borderRadius: 'var(--radius)', padding: '20px 16px', textAlign: 'center', cursor: 'pointer',
-                background: isDragActive ? 'var(--success-light)' : 'var(--gray-50)',
+                background: isDragActive ? 'var(--success-light)' : 'var(--surface-1)',
                 transition: 'all var(--transition)', marginBottom: 12,
               }}
             >
               <input {...getInputProps()} />
               {uploadMutation.isPending ? (
-                <div style={{ color: 'var(--gray-400)', fontSize: 13 }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
                   <div style={{ width: 20, height: 20, border: '2px solid var(--emerald)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto 8px' }} />
                   Reading your file...
                 </div>
               ) : (
                 <>
                   <div style={{ fontSize: 28, marginBottom: 8 }}>📄</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)' }}>Drop resume here</div>
-                  <div style={{ fontSize: 12, color: 'var(--gray-400)', marginTop: 4 }}>PDF, DOCX, or TXT · or click to browse</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-heading)' }}>Drop resume here</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>PDF, DOCX, or TXT · or click to browse</div>
                 </>
               )}
             </div>
             {uploadError && <p style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 8 }}>{uploadError}</p>}
-            <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 8, textAlign: 'center' }}>— or paste below —</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, textAlign: 'center' }}>— or paste below —</div>
             <textarea
               value={resumeText}
               onChange={e => setResumeText(e.target.value)}
               placeholder="Paste your resume text here..."
               style={{
                 width: '100%', minHeight: 140, padding: '10px 12px', fontSize: 13,
-                border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', resize: 'vertical',
-                fontFamily: 'var(--font-sans)', lineHeight: 1.5, color: 'var(--charcoal)',
-                background: resumeText ? 'white' : 'var(--gray-50)',
+                border: '1px solid var(--border-input)', borderRadius: 'var(--radius)', resize: 'vertical',
+                fontFamily: 'var(--font-sans)', lineHeight: 1.5, color: 'var(--text-primary)',
+                background: resumeText ? 'var(--surface-0)' : 'var(--surface-1)',
                 boxSizing: 'border-box',
               }}
             />
@@ -226,8 +228,8 @@ export function WorkspacePage() {
           </div>
 
           {/* Job Description */}
-          <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--gray-600)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 10 }}>
+          <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 10 }}>
               Job Description <span style={{ color: 'var(--gray-300)', fontWeight: 400, textTransform: 'none' }}>(optional but recommended)</span>
             </label>
             <textarea
@@ -236,8 +238,8 @@ export function WorkspacePage() {
               placeholder="Paste the job description here for a more accurate ATS score..."
               style={{
                 width: '100%', minHeight: 120, padding: '10px 12px', fontSize: 13,
-                border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', resize: 'vertical',
-                fontFamily: 'var(--font-sans)', lineHeight: 1.5, color: 'var(--charcoal)',
+                border: '1px solid var(--border-input)', borderRadius: 'var(--radius)', resize: 'vertical',
+                fontFamily: 'var(--font-sans)', lineHeight: 1.5, color: 'var(--text-primary)',
                 boxSizing: 'border-box',
               }}
             />
@@ -264,9 +266,9 @@ export function WorkspacePage() {
   // ─── Tab Bar ─────────────────────────────────────────────────────────────────
   const tabBar = (
     <div style={{
-      display: 'flex', gap: 4, background: 'white',
+      display: 'flex', gap: 4, background: 'var(--surface-0)',
       borderRadius: 'var(--radius-lg)', padding: 6,
-      boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)',
+      boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)',
     }}>
       {TABS.map(tab => (
         <button
@@ -331,11 +333,11 @@ export function WorkspacePage() {
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--gray-50)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--surface-page)' }}>
 
       {/* Header */}
       <header style={{
-        background: 'white', borderBottom: '1px solid var(--gray-100)',
+        background: 'var(--surface-0)', borderBottom: '1px solid var(--border)',
         padding: isMobile ? '0 16px' : '0 32px',
         display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', height: 56, flexShrink: 0,
@@ -345,7 +347,7 @@ export function WorkspacePage() {
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
           {/* Hide email on mobile — too wide */}
-          {user && !isMobile && <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>{user.email}</span>}
+          {user && !isMobile && <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{user.email}</span>}
           {!isPro && (
             <span style={{ background: 'var(--warning-light)', color: 'var(--warning)', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999 }}>FREE</span>
           )}
@@ -353,6 +355,17 @@ export function WorkspacePage() {
             <span style={{ background: 'var(--success-light)', color: 'var(--success)', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999 }}>PRO</span>
           )}
           {!isPro && <Button size="sm" variant="primary" onClick={() => navigate('/pricing')}>Upgrade</Button>}
+          <button
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            style={{
+              background: 'var(--surface-1)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)', padding: '5px 9px', fontSize: 15,
+              cursor: 'pointer', lineHeight: 1, transition: 'all var(--transition)',
+            }}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           {user
             ? <Button size="sm" variant="ghost" onClick={() => { signOut(); navigate('/') }}>Sign Out</Button>
             : <Button size="sm" variant="ghost" onClick={() => navigate('/login')}>Sign In</Button>

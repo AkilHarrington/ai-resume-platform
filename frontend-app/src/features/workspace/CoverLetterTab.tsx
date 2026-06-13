@@ -63,12 +63,12 @@ export function CoverLetterTab({ result, isLoading, isStreaming, hasResume, comp
     <EmptyCard>
       <EmptyState icon="📝" title="Cover Letter Generator" subtitle="Claude writes a tailored, professional cover letter based on your resume and the job description." />
       <div style={{ marginTop: 16 }}>
-        <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--gray-600)', display: 'block', marginBottom: 6 }}>Company Name (optional)</label>
+        <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>Company Name (optional)</label>
         <input
           value={companyName}
           onChange={e => setCompanyName(e.target.value)}
           placeholder="e.g. Google, Stripe, Acme Corp"
-          style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 12 }}
+          style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-input)', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 12 }}
         />
         <Button fullWidth size="lg" variant="secondary" disabled={!hasResume} onClick={onRun}>
           📝 Generate Cover Letter
@@ -79,9 +79,9 @@ export function CoverLetterTab({ result, isLoading, isStreaming, hasResume, comp
   )
 
   return (
-    <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 28, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)', animation: 'fadeIn 0.3s ease' }}>
+    <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 28, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)', animation: 'fadeIn 0.3s ease' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--navy)' }}>Your Cover Letter</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>Your Cover Letter</h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {isStreaming && (
             <span style={{ fontSize: 12, color: 'var(--emerald)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -97,8 +97,8 @@ export function CoverLetterTab({ result, isLoading, isStreaming, hasResume, comp
         </div>
       </div>
       <div style={{
-        background: 'var(--gray-50)', borderRadius: 'var(--radius)', padding: '24px 28px',
-        fontSize: 14, lineHeight: 1.8, color: 'var(--charcoal)', whiteSpace: 'pre-wrap',
+        background: 'var(--surface-1)', borderRadius: 'var(--radius)', padding: '24px 28px',
+        fontSize: 14, lineHeight: 1.8, color: 'var(--text-primary)', whiteSpace: 'pre-wrap',
         maxHeight: 560, overflow: 'auto',
       }}>
         {result}

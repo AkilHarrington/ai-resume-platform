@@ -45,12 +45,12 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
 
   if (result.noJd) return (
     <div style={{
-      background: 'white', borderRadius: 'var(--radius-lg)', padding: 32,
-      boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)', textAlign: 'center',
+      background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 32,
+      boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)', textAlign: 'center',
     }}>
       <div style={{ fontSize: 40, marginBottom: 16 }}>📋</div>
-      <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--navy)', marginBottom: 10 }}>Add a Job Description to Get Your Score</h2>
-      <p style={{ fontSize: 14, color: 'var(--gray-500)', lineHeight: 1.7, maxWidth: 420, margin: '0 auto' }}>
+      <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)', marginBottom: 10 }}>Add a Job Description to Get Your Score</h2>
+      <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, maxWidth: 420, margin: '0 auto' }}>
         Paste the job description you're targeting in the left panel, then run the scan again.
         Without a JD, there's nothing to match your resume against.
       </p>
@@ -75,7 +75,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>
               Your optimized resume scored {optimizedScore} during optimization.
             </span>
-            <span style={{ fontSize: 13, color: 'var(--charcoal)', marginLeft: 6 }}>
+            <span style={{ fontSize: 13, color: 'var(--text-primary)', marginLeft: 6 }}>
               Small differences between this score and optimization are expected — the two steps use different AI models.
             </span>
           </div>
@@ -83,22 +83,22 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
       )}
 
       {/* ── Score Card ── */}
-      <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: isMobile ? 20 : 28, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
+      <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: isMobile ? 20 : 28, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 16 : 32, flexWrap: 'wrap' }}>
           <div style={{ textAlign: 'center' }}>
             <ScoreRing score={score} size={isMobile ? 80 : 110} />
-            <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 5, fontWeight: 500 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5, fontWeight: 500 }}>
               {scoreToPercentile(score)}
             </div>
           </div>
           <div style={{ flex: 1, minWidth: 160 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: isMobile ? 17 : 22, fontWeight: 800, color: 'var(--navy)' }}>ATS Compatibility Report</h2>
+              <h2 style={{ fontSize: isMobile ? 17 : 22, fontWeight: 800, color: 'var(--text-heading)' }}>ATS Compatibility Report</h2>
               {result.semantic && (
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'white', background: 'var(--emerald)', borderRadius: 999, padding: '2px 8px' }}>AI Scored</span>
               )}
             </div>
-            <p style={{ fontSize: isMobile ? 13 : 14, color: 'var(--gray-500)', lineHeight: 1.6 }}>
+            <p style={{ fontSize: isMobile ? 13 : 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
               {score >= 75
                 ? 'Strong compatibility. Your resume is likely to pass automated screening.'
                 : score >= 55
@@ -112,7 +112,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
       {/* ── Recruiter Verdict — own card, prominent ── */}
       {result.recruiterVerdict && isPro && (
         <div style={{
-          background: 'white',
+          background: 'var(--surface-0)',
           borderRadius: 'var(--radius-lg)',
           padding: isMobile ? 20 : 24,
           boxShadow: 'var(--shadow-sm)',
@@ -135,7 +135,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
           </div>
           <p style={{
             fontSize: isMobile ? 13 : 14,
-            color: 'var(--charcoal)',
+            color: 'var(--text-primary)',
             lineHeight: 1.75,
             fontStyle: 'italic',
             margin: 0,
@@ -147,22 +147,22 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
 
       {result.recruiterVerdict && !isPro && (
         <div style={{
-          background: 'white', borderRadius: 'var(--radius-lg)', padding: isMobile ? 16 : 20,
-          boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-200)',
+          background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: isMobile ? 16 : 20,
+          boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-input)',
           display: 'flex', alignItems: 'center', gap: 14,
         }}>
           <span style={{ fontSize: 24 }}>🔒</span>
           <div>
-            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)', marginBottom: 2 }}>Senior Recruiter Analysis — Pro feature</p>
-            <p style={{ fontSize: 12, color: 'var(--gray-500)' }}>Upgrade to see how a recruiter would evaluate your resume.</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 2 }}>Senior Recruiter Analysis — Pro feature</p>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Upgrade to see how a recruiter would evaluate your resume.</p>
           </div>
         </div>
       )}
 
       {/* ── Score Breakdown ── */}
       {result.categoryScores?.length > 0 && (
-        <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: isMobile ? 16 : 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)', marginBottom: 18 }}>Score Breakdown</h3>
+        <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: isMobile ? 16 : 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 18 }}>Score Breakdown</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             {result.categoryScores.map(cat => {
               const pct = Math.min(100, cat.score)
@@ -171,16 +171,16 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
                 <div key={cat.name}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--charcoal)' }}>{cat.name}</span>
-                      {cat.weight && <span style={{ fontSize: 11, color: 'var(--gray-400)', fontWeight: 500 }}>{cat.weight}</span>}
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{cat.name}</span>
+                      {cat.weight && <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>{cat.weight}</span>}
                     </div>
                     <span style={{ fontSize: 14, fontWeight: 800, color: barColor }}>{cat.score}</span>
                   </div>
-                  <div style={{ background: 'var(--gray-100)', borderRadius: 999, height: 7, overflow: 'hidden', marginBottom: cat.reasoning ? 6 : 0 }}>
+                  <div style={{ background: 'var(--surface-2)', borderRadius: 999, height: 7, overflow: 'hidden', marginBottom: cat.reasoning ? 6 : 0 }}>
                     <div style={{ height: '100%', width: '100%', background: barColor, transform: `scaleX(${pct / 100})`, transformOrigin: 'left', transition: 'transform 0.8s ease' }} />
                   </div>
                   {cat.reasoning && (
-                    <p style={{ fontSize: 12, color: 'var(--gray-500)', lineHeight: 1.6, marginTop: 4 }}>{cat.reasoning}</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, marginTop: 4 }}>{cat.reasoning}</p>
                   )}
                 </div>
               )
@@ -193,26 +193,26 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
       {(result.strengths?.length > 0 || result.gaps?.length > 0) && isPro && (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
           {result.strengths?.length > 0 && (
-            <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
+            <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--success)', marginBottom: 12 }}>✓ Strengths</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {result.strengths.map((s, i) => (
                   <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                     <span style={{ color: 'var(--success)', fontWeight: 700, flexShrink: 0, marginTop: 1 }}>•</span>
-                    <span style={{ fontSize: 13, color: 'var(--charcoal)', lineHeight: 1.5 }}>{s}</span>
+                    <span style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5 }}>{s}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
           {result.gaps?.length > 0 && (
-            <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
+            <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--danger)', marginBottom: 12 }}>✗ Gaps</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {result.gaps.map((g, i) => (
                   <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                     <span style={{ color: 'var(--danger)', fontWeight: 700, flexShrink: 0, marginTop: 1 }}>•</span>
-                    <span style={{ fontSize: 13, color: 'var(--charcoal)', lineHeight: 1.5 }}>{g}</span>
+                    <span style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5 }}>{g}</span>
                   </div>
                 ))}
               </div>
@@ -222,10 +222,10 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
       )}
 
       {(result.strengths?.length > 0 || result.gaps?.length > 0) && !isPro && (
-        <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)', textAlign: 'center' }}>
+        <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)', textAlign: 'center' }}>
           <div style={{ fontSize: 28, marginBottom: 8 }}>🔒</div>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)', marginBottom: 6 }}>Match Intelligence — Pro</h3>
-          <p style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 16 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 6 }}>Match Intelligence — Pro</h3>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
             Unlock your resume's strengths, skill gaps, and recruiter verdict with a Pro plan.
           </p>
           <button
@@ -239,7 +239,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
 
       {/* ── Matched / Missing Skills ── */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
-        <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
+        <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--success)', marginBottom: 14 }}>
             ✓ Matched Skills ({result.matchedKeywords.length})
           </h3>
@@ -247,7 +247,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
             {result.matchedKeywords.slice(0, 24).map(kw => <KeywordPill key={kw} word={kw} type="matched" />)}
           </div>
         </div>
-        <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
+        <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 20, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--danger)', marginBottom: 14 }}>
             ✗ Missing Skills ({result.missingKeywords.length})
           </h3>

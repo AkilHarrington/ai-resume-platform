@@ -42,8 +42,8 @@ export function Button({
   const variants: Record<string, CSSProperties> = {
     primary: { background: 'var(--emerald)', color: 'white', borderColor: 'var(--emerald)' },
     secondary: { background: 'var(--navy)', color: 'white', borderColor: 'var(--navy)' },
-    outline: { background: 'transparent', color: 'var(--navy)', borderColor: 'var(--navy)' },
-    ghost: { background: 'transparent', color: 'var(--charcoal)', borderColor: 'transparent' },
+    outline: { background: 'transparent', color: 'var(--text-heading)', borderColor: 'var(--text-heading)' },
+    ghost: { background: 'transparent', color: 'var(--text-primary)', borderColor: 'transparent' },
     danger: { background: 'var(--danger)', color: 'white', borderColor: 'var(--danger)' },
   }
 

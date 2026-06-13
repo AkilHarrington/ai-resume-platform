@@ -236,15 +236,15 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'fadeIn 0.3s ease' }}>
 
       {/* ── Score Delta Card ── */}
-      <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 28, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
-        <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--navy)', marginBottom: 20 }}>Optimization Results</h2>
+      <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 28, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)', marginBottom: 20 }}>Optimization Results</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 40, flexWrap: 'wrap' }}>
 
           {/* Before */}
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 12, color: 'var(--gray-400)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>Before</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>Before</div>
             <ScoreRing score={result.originalScore} size={90} label="" />
-            <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 5, fontWeight: 500 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5, fontWeight: 500 }}>
               {scoreToPercentile(result.originalScore)}
             </div>
           </div>
@@ -253,9 +253,9 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
 
           {/* After */}
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 12, color: 'var(--gray-400)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>After</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>After</div>
             {scoresEqual
-              ? <div style={{ fontSize: 13, color: 'var(--gray-400)', fontStyle: 'italic', marginTop: 8 }}>Score<br/>unavailable</div>
+              ? <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', marginTop: 8 }}>Score<br/>unavailable</div>
               : <ScoreRing score={result.optimizedScore} size={90} label="" />
             }
             {!scoresEqual && (
@@ -270,17 +270,17 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
             {improved ? (
               <>
                 <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--success)' }}>+{result.scoreImprovement} points</div>
-                <div style={{ fontSize: 14, color: 'var(--gray-500)', marginTop: 4 }}>ATS score improvement</div>
+                <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>ATS score improvement</div>
               </>
             ) : scoresEqual ? (
               <>
-                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--charcoal)' }}>Resume optimized ✓</div>
-                <div style={{ fontSize: 13, color: 'var(--gray-400)', marginTop: 4 }}>Re-scoring timed out — upload the optimized resume to the Scan tab to get your new score.</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Resume optimized ✓</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Re-scoring timed out — upload the optimized resume to the Scan tab to get your new score.</div>
               </>
             ) : (
               <>
-                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--gray-500)' }}>No improvement possible</div>
-                <div style={{ fontSize: 13, color: 'var(--gray-400)', marginTop: 4 }}>Your resume is already well-optimized for this role.</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-secondary)' }}>No improvement possible</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Your resume is already well-optimized for this role.</div>
               </>
             )}
           </div>
@@ -296,7 +296,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
             flexDirection: 'column',
             gap: 10,
           }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               What Claude changed
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
@@ -314,7 +314,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
               {bulletChanges > 0 && (
                 <span style={{
                   fontSize: 12, fontWeight: 600,
-                  color: 'var(--navy)', background: 'rgba(26,54,93,0.07)',
+                  color: 'var(--text-heading)', background: 'rgba(26,54,93,0.07)',
                   border: '1px solid rgba(26,54,93,0.15)',
                   borderRadius: 999, padding: '3px 10px',
                 }}>
@@ -328,14 +328,14 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
 
       {/* ── Resume Text + Diff ── */}
       {hasOptimizedText && (
-        <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
+        <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)' }}>Your Optimized Resume</h3>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)' }}>Your Optimized Resume</h3>
             <div style={{ display: 'flex', gap: 6 }}>
               {(['optimized', 'original', 'changes'] as const).map(v => (
                 <button key={v} onClick={() => setView(v)} style={{
                   padding: '4px 12px', borderRadius: 'var(--radius-sm)', fontSize: 12, fontWeight: 600,
-                  border: '1px solid var(--gray-200)', cursor: 'pointer',
+                  border: '1px solid var(--border-input)', cursor: 'pointer',
                   background: view === v ? 'var(--navy)' : 'transparent',
                   color: view === v ? 'white' : 'var(--gray-500)',
                   transition: 'all 0.12s ease',
@@ -350,7 +350,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
             <div style={{
               fontFamily: 'var(--font-sans)', fontSize: 12.5,
               lineHeight: 1.75, maxHeight: 440, overflow: 'auto',
-              padding: '12px 16px', background: 'var(--gray-50)', borderRadius: 'var(--radius)',
+              padding: '12px 16px', background: 'var(--surface-1)', borderRadius: 'var(--radius)',
               borderLeft: '3px solid var(--gray-200)',
             }}>
               {lineDiff.map((line, i) => {
@@ -380,8 +380,8 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
           ) : (
             <pre style={{
               whiteSpace: 'pre-wrap', fontFamily: 'var(--font-sans)', fontSize: 13,
-              color: 'var(--charcoal)', lineHeight: 1.7, maxHeight: 400,
-              overflow: 'auto', padding: 16, background: 'var(--gray-50)', borderRadius: 'var(--radius)',
+              color: 'var(--text-primary)', lineHeight: 1.7, maxHeight: 400,
+              overflow: 'auto', padding: 16, background: 'var(--surface-1)', borderRadius: 'var(--radius)',
             }}>
               {view === 'optimized' ? result.optimizedResumeText : result.originalResumeText}
             </pre>
@@ -401,9 +401,9 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
 
       {/* ── PDF Template Picker + Download ── */}
       {hasOptimizedText && (
-        <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)', marginBottom: 6 }}>Download as PDF</h3>
-          <p style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 16 }}>Choose a template and download your optimized resume as a polished PDF.</p>
+        <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 6 }}>Download as PDF</h3>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>Choose a template and download your optimized resume as a polished PDF.</p>
           <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
             {TEMPLATE_OPTIONS.map(t => {
               const selected = selectedTemplate === t.id
@@ -443,8 +443,8 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
           {/* Template note */}
           <div style={{
             marginBottom: 16, padding: '12px 16px',
-            background: 'var(--gray-50)', borderRadius: 'var(--radius)',
-            border: '1px solid var(--gray-200)', fontSize: 13, color: 'var(--gray-500)',
+            background: 'var(--surface-1)', borderRadius: 'var(--radius)',
+            border: '1px solid var(--border)', fontSize: 13, color: 'var(--text-secondary)',
           }}>
             📄 Select a template above, then click Download PDF — your optimized resume will be generated server-side and downloaded instantly.
           </div>
@@ -458,9 +458,9 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
       {result.optimizationGuidance && !scoresEqual && (
         <div style={{ background: 'var(--warning-light)', borderRadius: 'var(--radius-lg)', padding: 20, border: '1px solid #FDE68A' }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--warning)', marginBottom: 10 }}>{result.optimizationGuidance.title}</h3>
-          {result.optimizationGuidance.reasons.map((r, i) => <p key={i} style={{ fontSize: 13, color: 'var(--charcoal)', marginBottom: 4 }}>• {r}</p>)}
-          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--charcoal)', marginTop: 12 }}>{result.optimizationGuidance.suggestionsTitle}</p>
-          {result.optimizationGuidance.suggestions.map((s, i) => <p key={i} style={{ fontSize: 13, color: 'var(--gray-600)', marginTop: 4 }}>→ {s}</p>)}
+          {result.optimizationGuidance.reasons.map((r, i) => <p key={i} style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>• {r}</p>)}
+          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginTop: 12 }}>{result.optimizationGuidance.suggestionsTitle}</p>
+          {result.optimizationGuidance.suggestions.map((s, i) => <p key={i} style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>→ {s}</p>)}
         </div>
       )}
     </div>

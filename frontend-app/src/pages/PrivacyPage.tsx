@@ -14,13 +14,13 @@ function Section({ title, children }: SectionProps) {
   return (
     <section style={{ marginBottom: 40 }}>
       <h2 style={{
-        fontSize: 18, fontWeight: 800, color: 'var(--navy)',
+        fontSize: 18, fontWeight: 800, color: 'var(--text-heading)',
         marginBottom: 12, paddingBottom: 10,
         borderBottom: '2px solid var(--gray-100)',
       }}>
         {title}
       </h2>
-      <div style={{ fontSize: 15, color: 'var(--charcoal)', lineHeight: 1.8 }}>
+      <div style={{ fontSize: 15, color: 'var(--text-primary)', lineHeight: 1.8 }}>
         {children}
       </div>
     </section>
@@ -46,10 +46,10 @@ export function PrivacyPage() {
   const isMobile = useIsMobile()
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--gray-50)', fontFamily: 'var(--font-sans)' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--surface-page)', fontFamily: 'var(--font-sans)' }}>
       {/* Nav */}
       <nav style={{
-        background: 'white', borderBottom: '1px solid var(--gray-100)',
+        background: 'var(--surface-0)', borderBottom: '1px solid var(--border)',
         padding: '0 24px', height: 64, display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100,
         boxShadow: 'var(--shadow-sm)',
@@ -58,7 +58,7 @@ export function PrivacyPage() {
         <button
           onClick={() => navigate(-1)}
           style={{
-            fontSize: 13, color: 'var(--gray-500)', fontWeight: 600,
+            fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600,
             cursor: 'pointer', border: 'none', background: 'none',
             display: 'flex', alignItems: 'center', gap: 6,
           }}
@@ -76,18 +76,18 @@ export function PrivacyPage() {
         <div style={{ marginBottom: 40 }}>
           <h1 style={{
             fontSize: isMobile ? 28 : 36, fontWeight: 900,
-            color: 'var(--navy)', letterSpacing: '-0.02em', marginBottom: 8,
+            color: 'var(--text-heading)', letterSpacing: '-0.02em', marginBottom: 8,
           }}>
             Privacy Policy
           </h1>
-          <p style={{ fontSize: 14, color: 'var(--gray-400)' }}>
+          <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
             Last updated: {LAST_UPDATED}
           </p>
           <div style={{
             marginTop: 20, padding: '14px 18px',
             background: 'var(--success-light)', borderRadius: 'var(--radius)',
             border: '1px solid rgba(4, 120, 87, 0.15)',
-            fontSize: 14, color: 'var(--charcoal)', lineHeight: 1.6,
+            fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.6,
           }}>
             <strong>The short version:</strong> We collect your email, resume text, and payment info to run
             the service. We send your resume to Anthropic's Claude API for AI processing. We never sell
@@ -171,7 +171,7 @@ export function PrivacyPage() {
               href="https://www.anthropic.com/legal/privacy"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: 'var(--navy)', fontWeight: 600 }}
+              style={{ color: 'var(--text-heading)', fontWeight: 600 }}
             >
               Privacy Policy
             </a>
@@ -180,7 +180,7 @@ export function PrivacyPage() {
               href="https://www.anthropic.com/legal/aup"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: 'var(--navy)', fontWeight: 600 }}
+              style={{ color: 'var(--text-heading)', fontWeight: 600 }}
             >
               Usage Policy
             </a>
@@ -202,9 +202,9 @@ export function PrivacyPage() {
               fontSize: 14, marginBottom: 12,
             }}>
               <thead>
-                <tr style={{ background: 'var(--gray-50)', textAlign: 'left' }}>
+                <tr style={{ background: 'var(--surface-page)', textAlign: 'left' }}>
                   {['Provider', 'Purpose', 'Data Shared'].map(h => (
-                    <th key={h} style={{ padding: '10px 14px', fontWeight: 700, color: 'var(--navy)', borderBottom: '2px solid var(--gray-200)' }}>{h}</th>
+                    <th key={h} style={{ padding: '10px 14px', fontWeight: 700, color: 'var(--text-heading)', borderBottom: '2px solid var(--gray-200)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -214,10 +214,10 @@ export function PrivacyPage() {
                   ['Supabase', 'Database & authentication', 'Email, subscription status, resume text'],
                   ['Stripe', 'Payment processing', 'Payment card details, billing email'],
                 ].map(([provider, purpose, data], i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid var(--gray-100)' }}>
+                  <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '10px 14px', fontWeight: 600 }}>{provider}</td>
-                    <td style={{ padding: '10px 14px', color: 'var(--gray-600)' }}>{purpose}</td>
-                    <td style={{ padding: '10px 14px', color: 'var(--gray-600)' }}>{data}</td>
+                    <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>{purpose}</td>
+                    <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>{data}</td>
                   </tr>
                 ))}
               </tbody>
@@ -251,7 +251,7 @@ export function PrivacyPage() {
           ]} />
           <P>
             To exercise any of these rights, email us at{' '}
-            <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--navy)', fontWeight: 600 }}>
+            <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--text-heading)', fontWeight: 600 }}>
               {CONTACT_EMAIL}
             </a>
             . We will respond within 30 days. We may ask you to verify your identity before
@@ -321,14 +321,14 @@ export function PrivacyPage() {
             please contact us:
           </P>
           <div style={{
-            background: 'white', borderRadius: 'var(--radius)', padding: '20px 24px',
-            border: '1px solid var(--gray-100)', boxShadow: 'var(--shadow-sm)',
+            background: 'var(--surface-0)', borderRadius: 'var(--radius)', padding: '20px 24px',
+            border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)',
           }}>
-            <p style={{ fontWeight: 700, color: 'var(--navy)', marginBottom: 6 }}>AI Resume Studio</p>
-            <p style={{ color: 'var(--gray-600)', fontSize: 14, lineHeight: 1.7 }}>
+            <p style={{ fontWeight: 700, color: 'var(--text-heading)', marginBottom: 6 }}>AI Resume Studio</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.7 }}>
               Trinidad and Tobago<br />
               Email:{' '}
-              <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--navy)', fontWeight: 600 }}>
+              <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--text-heading)', fontWeight: 600 }}>
                 {CONTACT_EMAIL}
               </a>
             </p>

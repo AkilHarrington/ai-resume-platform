@@ -33,11 +33,11 @@ export function PricingPage() {
   })
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--gray-50)', fontFamily: 'var(--font-sans)' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--surface-page)', fontFamily: 'var(--font-sans)' }}>
 
       {/* Nav */}
       <nav style={{
-        background: 'white', borderBottom: '1px solid var(--gray-100)',
+        background: 'var(--surface-0)', borderBottom: '1px solid var(--border)',
         padding: isMobile ? '0 16px' : '0 40px',
         display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', height: 60,
@@ -50,15 +50,15 @@ export function PricingPage() {
 
       <div style={{ maxWidth: 880, margin: '0 auto', padding: isMobile ? '40px 16px' : '80px 24px' }}>
         <div style={{ textAlign: 'center', marginBottom: isMobile ? 32 : 48 }}>
-          <h1 style={{ fontSize: isMobile ? 28 : 40, fontWeight: 900, color: 'var(--navy)', letterSpacing: '-0.03em', marginBottom: 12 }}>
+          <h1 style={{ fontSize: isMobile ? 28 : 40, fontWeight: 900, color: 'var(--text-heading)', letterSpacing: '-0.03em', marginBottom: 12 }}>
             Simple, transparent pricing
           </h1>
-          <p style={{ color: 'var(--gray-500)', fontSize: 15 }}>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 15 }}>
             Start free. Upgrade when you're ready to land the interview.
           </p>
 
           {/* Billing Toggle */}
-          <div style={{ display: 'inline-flex', background: 'white', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-lg)', padding: 4, gap: 4, marginTop: 24 }}>
+          <div style={{ display: 'inline-flex', background: 'var(--surface-0)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 4, gap: 4, marginTop: 24 }}>
             {(['monthly', 'onetime'] as const).map(b => (
               <button key={b} onClick={() => setBilling(b)} style={{
                 padding: '8px 16px', borderRadius: 'var(--radius)', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
@@ -80,18 +80,18 @@ export function PricingPage() {
           gap: 24, marginBottom: 48,
         }}>
           {/* Free */}
-          <div style={{ background: 'white', borderRadius: 'var(--radius-xl)', padding: isMobile ? '28px 24px' : '36px 32px', border: '2px solid var(--gray-100)', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Free</div>
-            <div style={{ fontSize: 48, fontWeight: 900, color: 'var(--navy)', lineHeight: 1, marginBottom: 6 }}>$0</div>
-            <div style={{ fontSize: 14, color: 'var(--gray-400)', marginBottom: 24 }}>forever</div>
-            <Button fullWidth variant="outline" onClick={() => navigate(user ? '/workspace' : '/signup')} style={{ marginBottom: 24, borderColor: 'var(--navy)', color: 'var(--navy)' }}>
+          <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-xl)', padding: isMobile ? '28px 24px' : '36px 32px', border: '2px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Free</div>
+            <div style={{ fontSize: 48, fontWeight: 900, color: 'var(--text-heading)', lineHeight: 1, marginBottom: 6 }}>$0</div>
+            <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 24 }}>forever</div>
+            <Button fullWidth variant="outline" onClick={() => navigate(user ? '/workspace' : '/signup')} style={{ marginBottom: 24, borderColor: 'var(--navy)', color: 'var(--text-heading)' }}>
               Start Free Scan
             </Button>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {features.map(f => (
                 <div key={f.label} style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: f.free ? 1 : 0.35 }}>
                   <span style={{ color: f.free ? 'var(--success)' : 'var(--gray-300)', fontWeight: 700, flexShrink: 0 }}>{f.free ? '✓' : '✗'}</span>
-                  <span style={{ fontSize: 14, color: 'var(--charcoal)' }}>{f.label}</span>
+                  <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>{f.label}</span>
                 </div>
               ))}
             </div>
@@ -135,17 +135,17 @@ export function PricingPage() {
         </div>
 
         {/* FAQ */}
-        <div style={{ background: 'white', borderRadius: 'var(--radius-xl)', padding: isMobile ? '28px 20px' : '40px 32px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)' }}>
-          <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--navy)', marginBottom: 24 }}>Common questions</h2>
+        <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-xl)', padding: isMobile ? '28px 20px' : '40px 32px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
+          <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-heading)', marginBottom: 24 }}>Common questions</h2>
           {[
             { q: 'What\'s the difference between monthly and one-time?', a: 'Monthly gives you full access for $19/month, cancel anytime. One-time is a single $49 payment for lifetime Pro access — no recurring charges.' },
             { q: 'Does the free plan require a credit card?', a: 'No credit card required. You\'ll need a free account to get started — sign up takes less than 30 seconds.' },
             { q: 'How does the AI optimization work?', a: 'Claude analyzes your resume against the job description, identifies keyword gaps, and rewrites your content to improve ATS alignment — without fabricating your experience or changing facts.' },
             { q: 'What file formats can I upload?', a: 'PDF, DOCX, and plain text files are all supported.' },
           ].map(({ q, a }) => (
-            <div key={q} style={{ borderBottom: '1px solid var(--gray-100)', paddingBottom: 20, marginBottom: 20 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)', marginBottom: 6 }}>{q}</div>
-              <div style={{ fontSize: 14, color: 'var(--gray-500)', lineHeight: 1.7 }}>{a}</div>
+            <div key={q} style={{ borderBottom: '1px solid var(--border)', paddingBottom: 20, marginBottom: 20 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 6 }}>{q}</div>
+              <div style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7 }}>{a}</div>
             </div>
           ))}
         </div>

@@ -3,6 +3,7 @@ import { Logo } from '../components/Logo'
 import { Button } from '../components/Button'
 import { useAuth } from '../app/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useTheme } from '../app/ThemeContext'
 
 const features = [
   { icon: '🎯', title: 'Instant ATS Scan', desc: 'Get your ATS compatibility score in seconds. See exactly what keywords you\'re missing.' },
@@ -41,16 +42,17 @@ export function LandingPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const isMobile = useIsMobile()
+  const { theme, toggleTheme } = useTheme()
   const goToApp = () => navigate(user ? '/workspace' : '/signup')
 
   return (
-    <div style={{ fontFamily: 'var(--font-sans)', color: 'var(--charcoal)' }}>
+    <div style={{ fontFamily: 'var(--font-sans)', color: 'var(--text-primary)' }}>
 
       {/* Nav */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 50,
-        background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)',
-        borderBottom: '1px solid var(--gray-100)',
+        background: 'var(--nav-bg)', backdropFilter: 'blur(12px)',
+        borderBottom: '1px solid var(--border)',
         padding: isMobile ? '0 16px' : '0 40px',
         display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', height: 60,
@@ -59,6 +61,17 @@ export function LandingPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {!isMobile && <Button variant="ghost" size="sm" onClick={() => navigate('/pricing')}>Pricing</Button>}
           <Button variant="outline" size="sm" onClick={() => navigate(user ? '/workspace' : '/login')}>Sign In</Button>
+          <button
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            style={{
+              background: 'var(--surface-1)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)', padding: '5px 9px', fontSize: 15,
+              cursor: 'pointer', lineHeight: 1, transition: 'all var(--transition)',
+            }}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           <Button variant="primary" size="sm" onClick={goToApp}>{isMobile ? 'Start Free' : 'Get Started Free'}</Button>
         </div>
       </nav>
@@ -131,25 +144,25 @@ export function LandingPage() {
       </section>
 
       {/* Features */}
-      <section style={{ padding: isMobile ? '60px 20px' : '100px 40px', background: 'var(--gray-50)' }}>
+      <section style={{ padding: isMobile ? '60px 20px' : '100px 40px', background: 'var(--surface-page)' }}>
         <div style={{ maxWidth: 960, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: isMobile ? 36 : 60 }}>
-            <h2 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 800, color: 'var(--navy)', letterSpacing: '-0.02em' }}>
+            <h2 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>
               Everything you need to land the interview
             </h2>
-            <p style={{ color: 'var(--gray-500)', marginTop: 12, fontSize: 15 }}>
+            <p style={{ color: 'var(--text-secondary)', marginTop: 12, fontSize: 15 }}>
               A complete career intelligence toolkit — not just a resume builder.
             </p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20 }}>
             {features.map(f => (
               <div key={f.title} style={{
-                background: 'white', borderRadius: 'var(--radius-lg)', padding: isMobile ? '24px 20px' : '32px 24px',
-                boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)',
+                background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: isMobile ? '24px 20px' : '32px 24px',
+                boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)',
               }}>
                 <div style={{ fontSize: 32, marginBottom: 14 }}>{f.icon}</div>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--navy)', marginBottom: 8 }}>{f.title}</h3>
-                <p style={{ fontSize: 14, color: 'var(--gray-500)', lineHeight: 1.6 }}>{f.desc}</p>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 8 }}>{f.title}</h3>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{f.desc}</p>
               </div>
             ))}
           </div>
@@ -157,18 +170,18 @@ export function LandingPage() {
       </section>
 
       {/* Pricing */}
-      <section id="pricing" style={{ padding: isMobile ? '60px 20px' : '100px 40px', background: 'white' }}>
+      <section id="pricing" style={{ padding: isMobile ? '60px 20px' : '100px 40px', background: 'var(--surface-0)' }}>
         <div style={{ maxWidth: 820, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: isMobile ? 36 : 60 }}>
-            <h2 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 800, color: 'var(--navy)', letterSpacing: '-0.02em' }}>Simple, transparent pricing</h2>
-            <p style={{ color: 'var(--gray-500)', marginTop: 12 }}>Start free. Upgrade when you're ready.</p>
+            <h2 style={{ fontSize: isMobile ? 26 : 36, fontWeight: 800, color: 'var(--text-heading)', letterSpacing: '-0.02em' }}>Simple, transparent pricing</h2>
+            <p style={{ color: 'var(--text-secondary)', marginTop: 12 }}>Start free. Upgrade when you're ready.</p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
             {plans.map(plan => (
               <div key={plan.name} style={{
                 borderRadius: 'var(--radius-xl)', padding: isMobile ? '32px 24px' : '40px 32px',
-                border: plan.highlight ? '2px solid var(--emerald)' : '2px solid var(--gray-100)',
-                background: plan.highlight ? 'var(--navy)' : 'white',
+                border: plan.highlight ? '2px solid var(--emerald)' : '2px solid var(--border)',
+                background: plan.highlight ? 'var(--navy-dark)' : 'var(--surface-1)',
                 position: 'relative', boxShadow: plan.highlight ? 'var(--shadow-xl)' : 'var(--shadow-sm)',
               }}>
                 {plan.highlight && (
@@ -183,7 +196,7 @@ export function LandingPage() {
                 <div style={{ marginBottom: 24 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: plan.highlight ? 'rgba(255,255,255,0.6)' : 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>{plan.name}</div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                    <span style={{ fontSize: 48, fontWeight: 900, color: plan.highlight ? 'white' : 'var(--navy)', lineHeight: 1 }}>{plan.price}</span>
+                    <span style={{ fontSize: 48, fontWeight: 900, color: plan.highlight ? 'white' : 'var(--text-heading)', lineHeight: 1 }}>{plan.price}</span>
                     <span style={{ fontSize: 16, color: plan.highlight ? 'rgba(255,255,255,0.6)' : 'var(--gray-400)' }}>{plan.period}</span>
                   </div>
                   {plan.altPrice && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{plan.altPrice}</div>}
@@ -197,7 +210,7 @@ export function LandingPage() {
                   ))}
                 </ul>
                 <Button fullWidth variant={plan.highlight ? 'primary' : 'outline'} onClick={goToApp}
-                  style={plan.highlight ? {} : { borderColor: 'var(--navy)', color: 'var(--navy)' }}>
+                  style={plan.highlight ? {} : { borderColor: 'var(--navy)', color: 'var(--text-heading)' }}>
                   {plan.cta}
                 </Button>
               </div>

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './AuthContext'
+import { ThemeProvider } from './ThemeContext'
 import { ToastProvider } from '../components/Toast'
 import { LandingPage } from '../pages/LandingPage'
 import { WorkspacePage } from '../pages/WorkspacePage'
@@ -18,6 +19,7 @@ const queryClient = new QueryClient({
 export function AppShell() {
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
       <AuthProvider>
         <ToastProvider>
         <BrowserRouter>
@@ -34,6 +36,7 @@ export function AppShell() {
         </BrowserRouter>
         </ToastProvider>
       </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   )
 }

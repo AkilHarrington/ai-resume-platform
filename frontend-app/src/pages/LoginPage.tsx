@@ -26,36 +26,36 @@ export function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--gray-50)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-sans)' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--surface-page)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-sans)' }}>
       <div style={{ marginBottom: 32 }}>
         <Logo size="md" />
       </div>
 
-      <div style={{ background: 'white', borderRadius: 'var(--radius-xl)', padding: '40px 36px', width: '100%', maxWidth: 420, boxShadow: 'var(--shadow-lg)', border: '1px solid var(--gray-100)' }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--navy)', marginBottom: 6, textAlign: 'center' }}>Welcome back</h1>
-        <p style={{ fontSize: 14, color: 'var(--gray-400)', textAlign: 'center', marginBottom: 28 }}>Sign in to your AI Resume Studio account</p>
+      <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-xl)', padding: '40px 36px', width: '100%', maxWidth: 420, boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)' }}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-heading)', marginBottom: 6, textAlign: 'center' }}>Welcome back</h1>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)', textAlign: 'center', marginBottom: 28 }}>Sign in to your AI Resume Studio account</p>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--gray-600)', display: 'block', marginBottom: 6 }}>Email</label>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>Email</label>
             <input
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="you@example.com"
               required
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 14, fontFamily: 'var(--font-sans)', boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-input)', borderRadius: 'var(--radius)', fontSize: 14, fontFamily: 'var(--font-sans)', boxSizing: 'border-box' }}
             />
           </div>
           <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--gray-600)', display: 'block', marginBottom: 6 }}>Password</label>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>Password</label>
             <input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
               required
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', fontSize: 14, fontFamily: 'var(--font-sans)', boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-input)', borderRadius: 'var(--radius)', fontSize: 14, fontFamily: 'var(--font-sans)', boxSizing: 'border-box' }}
             />
           </div>
 
@@ -68,9 +68,9 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <p style={{ fontSize: 13, color: 'var(--gray-400)', textAlign: 'center', marginTop: 24 }}>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', marginTop: 24 }}>
           Don't have an account?{' '}
-          <Link to="/signup" style={{ color: 'var(--navy)', fontWeight: 600, textDecoration: 'none' }}>Sign up free</Link>
+          <Link to="/signup" style={{ color: 'var(--text-heading)', fontWeight: 600, textDecoration: 'none' }}>Sign up free</Link>
         </p>
       </div>
     </div>
