@@ -1,5 +1,6 @@
 import axios from 'axios'
-import { API_BASE_URL } from './config'
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -107,7 +108,8 @@ export async function createCheckoutSession(plan: 'monthly' | 'onetime'): Promis
   return data
 }
 
-export async function getProStatus(): Promise<{ isPro: boolean }> {
-  const { data } = await api.get<{ isPro: boolean }>('/api/user/pro-status')
+export async function getProStatus(userId?: string): Promise<{ isPro: boolean }> {
+  const params = userId ? `?user_id=${userId}` : ''
+  const { data } = await api.get<{ isPro: boolean }>(`/api/user/pro-status${params}`)
   return data
 }

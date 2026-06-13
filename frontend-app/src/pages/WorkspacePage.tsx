@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../app/AuthContext'
 import { useDropzone } from 'react-dropzone'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { pdf } from '@react-pdf/renderer'
@@ -21,6 +22,7 @@ type Tab = 'scan' | 'optimize' | 'cover-letter' | 'linkedin'
 
 export function WorkspacePage() {
   const navigate = useNavigate()
+  const { user, signOut } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>('scan')
   const [resumeText, setResumeText] = useState('')
   const [jobDescription, setJobDescription] = useState('')
@@ -33,8 +35,8 @@ export function WorkspacePage() {
   const [uploadError, setUploadError] = useState('')
 
   const proQuery = useQuery({
-    queryKey: ['pro-status'],
-    queryFn: getProStatus,
+    queryKey: ['pro-status', user?.id],
+    queryFn: () => getProStatus(user?.id),
     staleTime: 60_000,
   })
   const isPro = proQuery.data?.isPro ?? false
@@ -99,11 +101,26 @@ export function WorkspacePage() {
           <Logo size="sm" />
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{
-            background: 'var(--warning-light)', color: 'var(--warning)',
-            fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 999,
-          }}>FREE PLAN</span>
-          <Button size="sm" variant="primary" onClick={() => navigate('/pricing')}>Upgrade to Pro</Button>
+          {user && (
+            <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>{user.email}</span>
+          )}
+          {!isPro && (
+            <span style={{
+              background: 'var(--warning-light)', color: 'var(--warning)',
+              fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 999,
+            }}>FREE PLAN</span>
+          )}
+          {isPro && (
+            <span style={{
+              background: 'var(--success-light)', color: 'var(--success)',
+              fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 999,
+            }}>PRO</span>
+          )}
+          {!isPro && <Button size="sm" variant="primary" onClick={() => navigate('/pricing')}>Upgrade to Pro</Button>}
+          {user
+            ? <Button size="sm" variant="ghost" onClick={() => { signOut(); navigate('/') }}>Sign Out</Button>
+            : <Button size="sm" variant="ghost" onClick={() => navigate('/login')}>Sign In</Button>
+          }
         </div>
       </header>
 

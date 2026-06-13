@@ -8,6 +8,7 @@ import io
 import os
 
 import stripe
+from fastapi import Request
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,6 +25,7 @@ from services.resume_service import (
     generate_linkedin_optimization,
 )
 from services.resume_parser import parse_resume_text
+from services.supabase_service import get_user_by_email, set_user_pro
 
 load_dotenv()
 
@@ -310,8 +312,49 @@ def create_checkout_session(plan: str = "monthly"):
 
 
 @app.get("/api/user/pro-status")
-def pro_status():
-    # FORCE_PRO=true in your .env lets you test pro features locally without Stripe.
-    # Replace with a real Supabase subscription check when auth is wired.
+def pro_status(user_id: str = ""):
+    # FORCE_PRO=true bypasses everything — useful for local testing.
     force_pro = os.getenv("FORCE_PRO", "").lower() in ("true", "1", "yes")
-    return {"isPro": force_pro}
+    if force_pro:
+        return {"isPro": True}
+    if not user_id:
+        return {"isPro": False}
+    from services.supabase_service import get_user_pro_status
+    return {"isPro": get_user_pro_status(user_id)}
+
+
+# =========================================================
+# Stripe Webhook
+# =========================================================
+
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+
+
+@app.post("/api/payments/webhook")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except stripe.errors.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid Stripe signature.")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        customer_email = session.get("customer_details", {}).get("email", "")
+        customer_id = session.get("customer", "")
+        subscription_id = session.get("subscription", "") or ""
+
+        if customer_email:
+            user = get_user_by_email(customer_email)
+            if user:
+                set_user_pro(
+                    user_id=user["id"],
+                    stripe_customer_id=customer_id,
+                    stripe_subscription_id=subscription_id,
+                )
+
+    return {"received": True}
