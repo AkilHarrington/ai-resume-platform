@@ -26,7 +26,7 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
 | **JD** | Job description (pasted by user for ATS scan) |
 | **semantic scan** | ATS scan using Claude — requires API credits |
 
-## Current State (after session 9 — principal code review remediation complete)
+## Current State (after session 11 — dark mode + PDF backend complete)
 
 ### ✅ Done
 - Claude semantic ATS scorer — 6 dimensions (Human Readability 5%, Keyword Alignment 30%)
@@ -45,7 +45,7 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
 - **Stripe webhook**: `/api/payments/webhook` flips `is_pro=true` in Supabase on `checkout.session.completed`
 - **Auth routing**: unauthenticated users redirected to `/login`; landing page routes to `/signup` or `/workspace` based on session
 - **Login/Signup pages**: `/login` and `/signup` with email confirmation flow
-- **Workspace header**: shows user email, PRO badge, Sign Out button
+- **Workspace header**: shows user email, PRO badge, Sign Out button, dark mode toggle
 - **Homebrew + Stripe CLI**: installed and authenticated locally
 - **Supabase + Stripe keys**: all wired into both `.env` files
 - **Security hardening**:
@@ -71,13 +71,21 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
   - MEDIUM: React hooks ordering, enabled:!!user guard, LCS dep array fixed, SSE null guard, scaleX animation, Haiku model alias, security headers
   - LOW: `--success` color → #047857 (WCAG AA 4.54:1), high-visibility focus rings (button/a/[role=tab])
   - Deferred: API versioning prefix (pre-launch disruption), Zod runtime validation (half-day project)
+- **Privacy policy + Terms of Service**: `/privacy` and `/terms` routes, linked in footer and signup
+- **Backend PDF service** (`backend/services/pdf_service.py`): ReportLab renders all 3 resume templates + cover letter; endpoints `/api/resume/download-pdf` and `/api/cover-letter/download-pdf`
+- **Dark mode — semantic token architecture (GitHub palette)**:
+  - `ThemeContext.tsx` — React context, `localStorage` persistence, `prefers-color-scheme` OS fallback
+  - `globals.css` — primitive tokens never change; semantic role tokens (`--text-primary`, `--surface-0`, etc.) override per theme
+  - GitHub dark palette: page #0D1117, cards #161B22, raised #21262D, overlay #2D333B (tonal elevation)
+  - Toggle button in both workspace header and landing page nav
+  - All pages updated: LandingPage, WorkspacePage, LoginPage, SignupPage, PricingPage, PrivacyPage, TermsPage, all workspace tabs
+  - TypeScript clean (0 errors) after full migration
 
 ### 🔲 Next session
 1. **Add Anthropic API credits** (blocker — nothing AI works without this)
 2. **Test end-to-end** with Danielle's resume + JD (scan → optimize → cover letter → linkedin → PDF download)
 3. **Set FORCE_PRO=false** and test real Stripe → webhook → Supabase → pro unlock flow
 4. **Deploy** — backend to Render, frontend to Vercel
-5. **Privacy policy + Terms of Service** — required before public launch
 
 ### Deferred (explicit)
 - API versioning (/api/v1 prefix) — add after deploy, not before
@@ -122,9 +130,14 @@ stripe listen --forward-to localhost:8000/api/payments/webhook
 | `frontend-app/src/app/AuthContext.tsx` | Supabase auth context — user, session, signIn, signUp, signOut |
 | `frontend-app/src/services/supabase.ts` | Supabase client (uses VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY) |
 | `frontend-app/src/api/resumeApi.ts` | All API calls, axios config |
-| `frontend-app/src/app/AppShell.tsx` | Router — all routes incl. /login, /signup |
+| `frontend-app/src/app/AppShell.tsx` | Router — all routes incl. /login, /signup, /privacy, /terms |
+| `frontend-app/src/app/ThemeContext.tsx` | Dark/light theme context with localStorage + OS fallback |
 | `frontend-app/src/features/resume-templates/` | 3 template configs + ResumePDF renderer |
+| `frontend-app/src/styles/globals.css` | CSS primitives + semantic tokens; GitHub dark palette |
+| `backend/services/pdf_service.py` | ReportLab PDF generation for all 3 resume templates + cover letter |
+| `frontend-app/src/pages/PrivacyPage.tsx` | /privacy route |
+| `frontend-app/src/pages/TermsPage.tsx` | /terms route |
 
 ## Project Rating
-**Current: 7.5/10** — all 28 code review issues resolved. Honest score: production-ready architecture, zero fabricated data, real security posture.
-Gap to 10: Anthropic credits + end-to-end test (blocker), deployment to Render/Vercel, privacy policy/ToS, post-launch API versioning + Zod validation.
+**Current: 8.5/10** — dark mode, privacy/ToS, backend PDF, all code review issues done. Production-ready architecture.
+Gap to 10: Anthropic credits + end-to-end test (blocker), deployment to Render/Vercel, post-launch API versioning + Zod validation.

@@ -16,7 +16,7 @@ function Section({ title, children }: SectionProps) {
       <h2 style={{
         fontSize: 18, fontWeight: 800, color: 'var(--text-heading)',
         marginBottom: 12, paddingBottom: 10,
-        borderBottom: '2px solid var(--gray-100)',
+        borderBottom: '2px solid var(--border)',
       }}>
         {title}
       </h2>
@@ -85,8 +85,8 @@ export function TermsPage() {
           </p>
           <div style={{
             marginTop: 20, padding: '14px 18px',
-            background: '#EFF6FF', borderRadius: 'var(--radius)',
-            border: '1px solid #BFDBFE',
+            background: 'var(--surface-1)', borderRadius: 'var(--radius)',
+            border: '1px solid var(--border-input)',
             fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.6,
           }}>
             <strong>The short version:</strong> Use the Service honestly, pay for Pro features if
