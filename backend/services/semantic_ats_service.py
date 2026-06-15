@@ -55,7 +55,12 @@ Analyze the resume against the job description across 6 dimensions.
 Be accurate and realistic — do not inflate scores. A score of 70 is good, 85+ is excellent.
 
 DIMENSIONS (score each 0–100):
-- keyword_alignment: Semantic match of resume skills/terms to JD requirements (not just literal words)
+- keyword_alignment: Match of resume skills/terms to JD requirements.
+  IMPORTANT: Score meaningfully higher when the resume explicitly names specific tools, platforms,
+  certifications, or methodologies that the JD lists (e.g. if the JD mentions "CrowdStrike" or "OSCP"
+  and the resume uses those exact terms, that is stronger alignment than generic paraphrasing).
+  Explicit terminology > semantic proximity. A resume naming 8 of 10 required technologies should
+  score at least 85. One naming all 10 should score 95+.
 - experience_relevance: How relevant the candidate's actual experience is to this specific role
 - seniority_match: Whether the candidate's level matches the role's seniority expectations
 - achievement_quality: Quality of accomplishments — quantified results, scope, impact statements

@@ -53,13 +53,23 @@ def get_user_pro_status(user_id: str) -> bool:
     """
     Return True if the user has an active Pro subscription.
 
-    Raises RuntimeError on connection/infrastructure failures so callers can
-    distinguish "user is not Pro" from "we couldn't check" — preventing paying
-    users from being locked out during Supabase outages.
+    Returns False if no profile row exists yet (new user whose trigger hasn't fired).
+    Raises on genuine infrastructure failures so callers can return 503 and avoid
+    silently demoting paying users during Supabase outages.
     """
     client = _get_client()
-    result = client.table("profiles").select("is_pro").eq("id", user_id).single().execute()
-    return bool(result.data.get("is_pro", False))
+    try:
+        result = client.table("profiles").select("is_pro").eq("id", user_id).single().execute()
+        return bool(result.data.get("is_pro", False))
+    except Exception as e:
+        # Supabase raises PostgREST error PGRST116 when .single() finds 0 rows.
+        # Treat this as "no profile yet" → free tier, not an infrastructure failure.
+        err_str = str(e).lower()
+        if "pgrst116" in err_str or "no rows" in err_str:
+            logger.info("get_user_pro_status: no profile row for %s — treating as free.", user_id)
+            return False
+        # Anything else is a real infrastructure failure — re-raise for 503 handling.
+        raise
 
 
 def set_user_pro(user_id: str, stripe_customer_id: str = "", stripe_subscription_id: str = "") -> None:

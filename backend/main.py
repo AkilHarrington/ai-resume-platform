@@ -28,6 +28,7 @@ from services.semantic_ats_service import semantic_ats_score
 from fastapi.responses import StreamingResponse
 from services.resume_service import (
     optimize_resume_text,
+    stream_resume_optimization,
     generate_cover_letter,
     generate_linkedin_optimization,
     stream_cover_letter,
@@ -105,7 +106,17 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
 # Rate limiter
 # =========================================================
 
-limiter = Limiter(key_func=get_remote_address)
+# Rate limit by authenticated user ID for protected routes, fall back to IP for public ones.
+def _user_or_ip_key(request: Request) -> str:
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth.removeprefix("Bearer ").strip()
+        user = verify_token(token)
+        if user:
+            return f"user:{user['id']}"
+    return get_remote_address(request)
+
+limiter = Limiter(key_func=_user_or_ip_key)
 
 # =========================================================
 # App
@@ -135,8 +146,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -150,6 +161,10 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Content-Security-Policy — backend API only serves JSON/PDF; block everything else
+    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    # Permissions Policy — disable browser features the API never uses
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     # HSTS — only on HTTPS (production); omit in dev so browsers don't cache it
     if ENVIRONMENT == "production":
         response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
@@ -249,6 +264,9 @@ def extract_text_from_upload(file: UploadFile) -> str:
             raise HTTPException(status_code=422, detail="Could not extract text from PDF.")
 
     if filename.endswith(".docx"):
+        # Magic bytes check — DOCX files are ZIP archives, always start with PK\x03\x04
+        if not content.startswith(b"PK\x03\x04"):
+            raise HTTPException(status_code=422, detail="File does not appear to be a valid DOCX.")
         try:
             import docx
             doc = docx.Document(io.BytesIO(content))
@@ -368,93 +386,133 @@ def resume_scan(request: Request, data: ResumeScanRequest, user: dict = Depends(
 
 
 # =========================================================
-# Resume Optimize — sync def: runs in FastAPI's thread pool
+# Resume Optimize — streaming SSE (async required for StreamingResponse)
+# Events: status → token (many) → result → done  |  error on failure
 # =========================================================
 
-@app.post("/api/resume/optimize")
+@app.post("/api/resume/optimize/stream")
 @limiter.limit("5/minute")
-def resume_optimize(request: Request, data: ResumeOptimizeRequest, user: dict = Depends(require_pro)):
-    job_description = data.jobDescription or ""
+async def resume_optimize_stream(request: Request, data: ResumeOptimizeRequest, user: dict = Depends(require_pro)):
+    def generate():
+        try:
+            job_description = data.jobDescription or ""
 
-    rule_ats = calculate_ats_score(data.resumeText, job_description)
-    missing_keywords = rule_ats.get("missing_keywords", [])
+            # ── Step 1: keyword extraction ────────────────────────────────────
+            # Reuse scan-tab keywords when available — skips the rule-based pass entirely.
+            if data.existingKeywords is not None:
+                missing_keywords = data.existingKeywords
+                rule_ats = {"missing_keywords": missing_keywords, "matched_keywords": [], "ats_score": 0}
+            else:
+                yield f"data: {json.dumps({'type': 'status', 'message': 'Analyzing keywords…'})}\n\n"
+                rule_ats = calculate_ats_score(data.resumeText, job_description)
+                missing_keywords = rule_ats.get("missing_keywords", [])
 
-    if job_description.strip():
-        original_ats = semantic_ats_score(data.resumeText, job_description)
-    else:
-        original_ats = rule_ats
-    original_score = original_ats.get("ats_score", 0)
+            # ── Step 2: original score ────────────────────────────────────────
+            # Reuse scan-tab score when available — skips the Haiku call entirely.
+            if data.existingScore and data.existingScore > 0:
+                original_score = data.existingScore
+                original_ats = {**rule_ats, "ats_score": original_score}
+            else:
+                yield f"data: {json.dumps({'type': 'status', 'message': 'Scoring your resume…'})}\n\n"
+                if job_description.strip():
+                    original_ats = semantic_ats_score(data.resumeText, job_description)
+                else:
+                    original_ats = rule_ats
+                original_score = original_ats.get("ats_score", 0)
 
-    optimized_text = optimize_resume_text(
-        data.resumeText,
-        job_description,
-        missing_keywords,
-        original_score=original_score,
+            # ── Step 3: stream the rewrite (Sonnet, first token in ~1-2s) ────
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Rewriting your resume…'})}\n\n"
+            optimized_text = ""
+            for chunk in stream_resume_optimization(
+                data.resumeText, job_description, missing_keywords, original_score
+            ):
+                optimized_text += chunk
+                yield f"data: {json.dumps({'type': 'token', 'text': chunk})}\n\n"
+
+            # ── Validate assembled text ───────────────────────────────────────
+            optimized_text = optimized_text.strip()
+            if not optimized_text:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Claude returned an empty response. Please try again.'})}\n\n"
+                return
+            if len(optimized_text) < max(120, int(len(data.resumeText) * 0.5)):
+                yield f"data: {json.dumps({'type': 'error', 'message': 'The optimized resume was unexpectedly short. Please try again.'})}\n\n"
+                return
+
+            # ── Step 4: re-score (Haiku, ~2s) ────────────────────────────────
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Scoring your improvements…'})}\n\n"
+            if job_description.strip():
+                improved_ats = semantic_ats_score(optimized_text, job_description)
+                if improved_ats.get("ats_score", 0) == 0 and original_score > 0:
+                    logger.warning("First re-score returned 0 — retrying once.")
+                    improved_ats = semantic_ats_score(optimized_text, job_description)
+            else:
+                improved_ats = calculate_ats_score(optimized_text, job_description)
+            improved_score = improved_ats.get("ats_score", 0)
+
+            # Fallback: estimate from keyword diff when both semantic attempts fail
+            scorer_failed = improved_score == 0 and original_score > 0
+            if scorer_failed:
+                logger.warning("Semantic re-score failed twice — estimating from keyword diff.")
+                rule_improved = calculate_ats_score(optimized_text, job_description)
+                rule_before = rule_ats.get("ats_score", 0)
+                rule_after = rule_improved.get("ats_score", 0)
+                if rule_before > 0 and rule_after > rule_before:
+                    keyword_gain = (rule_after - rule_before) / 100.0
+                    estimated_gain = max(1, min(round(original_score * keyword_gain * 0.5), 10))
+                    improved_score = original_score + estimated_gain
+                    improved_ats = {**original_ats, "ats_score": improved_score,
+                                    "matched_keywords": rule_improved.get("matched_keywords", []),
+                                    "missing_keywords": rule_improved.get("missing_keywords", [])}
+                else:
+                    improved_score = original_score
+                    improved_ats = {**original_ats, "ats_score": improved_score}
+
+            # Cap credibility ceiling
+            max_allowed = 15 if original_score < 60 else (15 if original_score < 75 else 12)
+            if not scorer_failed and improved_score - original_score > max_allowed:
+                improved_score = original_score + max_allowed
+                improved_ats = {**improved_ats, "ats_score": improved_score}
+
+            show_guidance = improved_score <= original_score
+
+            log_scan_result(
+                user_id=user["id"],
+                scan_type="optimize",
+                before_score=original_score,
+                after_score=improved_score,
+                missing_keywords=missing_keywords,
+                matched_keywords=improved_ats.get("matched_keywords", []),
+                semantic=True,
+            )
+
+            # ── Step 5: final result event ────────────────────────────────────
+            result_payload = {
+                "type": "result",
+                "originalScore": original_score,
+                "optimizedScore": improved_score,
+                "scoreImprovement": improved_score - original_score,
+                "originalResumeText": data.resumeText,
+                "optimizedResumeText": optimized_text,
+                "missingKeywordsBefore": missing_keywords,
+                "missingKeywordsAfter": improved_ats.get("missing_keywords", []),
+                "matchIntelligence": improved_ats.get("match_intelligence", {}),
+                "optimizationGuidance": build_optimization_guidance(data.resumeText) if show_guidance else None,
+                "optimizedCategoryScores": improved_ats.get("category_scores", []),
+            }
+            yield f"data: {json.dumps(result_payload)}\n\n"
+            yield 'data: {"type": "done"}\n\n'
+
+        except AIUnavailableError as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        except Exception as e:
+            logger.error("optimize/stream unexpected error: %s: %s", type(e).__name__, e)
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Optimization failed. Please try again.'})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
-
-    if job_description.strip():
-        improved_ats = semantic_ats_score(optimized_text, job_description)
-        # Retry once if the scorer returned 0 (transient Claude failure)
-        if improved_ats.get("ats_score", 0) == 0 and original_score > 0:
-            logger.warning("First re-score returned 0 — retrying once.")
-            improved_ats = semantic_ats_score(optimized_text, job_description)
-    else:
-        improved_ats = calculate_ats_score(optimized_text, job_description)
-    improved_score = improved_ats.get("ats_score", 0)
-
-    # If both semantic attempts failed, try to estimate from keyword diff.
-    # IMPORTANT: never fabricate an improvement — return original score honestly if we can't measure.
-    scorer_failed = improved_score == 0 and original_score > 0
-    if scorer_failed:
-        logger.warning("Semantic re-score failed twice — estimating from keyword diff.")
-        rule_improved = calculate_ats_score(optimized_text, job_description)
-        rule_before = rule_ats.get("ats_score", 0)
-        rule_after = rule_improved.get("ats_score", 0)
-        if rule_before > 0 and rule_after > rule_before:
-            keyword_gain = (rule_after - rule_before) / 100.0
-            estimated_gain = max(1, min(round(original_score * keyword_gain * 0.5), 10))
-            improved_score = original_score + estimated_gain
-            improved_ats = {**original_ats, "ats_score": improved_score,
-                            "matched_keywords": rule_improved.get("matched_keywords", []),
-                            "missing_keywords": rule_improved.get("missing_keywords", [])}
-        else:
-            # Keyword diff shows no improvement either — return original score honestly.
-            # Do NOT invent points. The customer keeps their optimized text.
-            logger.warning("Keyword diff also shows no improvement — returning original score.")
-            improved_score = original_score
-            improved_ats = {**original_ats, "ats_score": improved_score}
-
-    # Cap credibility ceiling: clamp the displayed score, but KEEP the optimized text.
-    # Never revert the text — the customer paid for the optimization.
-    max_allowed = 15 if original_score < 60 else (15 if original_score < 75 else 12)
-
-    if not scorer_failed and improved_score - original_score > max_allowed:
-        improved_score = original_score + max_allowed
-        improved_ats = {**improved_ats, "ats_score": improved_score}
-
-    show_guidance = improved_score <= original_score
-
-    log_scan_result(
-        user_id=user["id"],
-        scan_type="optimize",
-        before_score=original_score,
-        after_score=improved_score,
-        missing_keywords=missing_keywords,
-        matched_keywords=improved_ats.get("matched_keywords", []),
-        semantic=True,
-    )
-
-    return {
-        "originalScore": original_score,
-        "optimizedScore": improved_score,
-        "scoreImprovement": improved_score - original_score,
-        "originalResumeText": data.resumeText,
-        "optimizedResumeText": optimized_text,
-        "missingKeywordsBefore": missing_keywords,
-        "missingKeywordsAfter": improved_ats.get("missing_keywords", []),
-        "matchIntelligence": improved_ats.get("match_intelligence", {}),
-        "optimizationGuidance": build_optimization_guidance(data.resumeText) if show_guidance else None,
-    }
 
 
 # =========================================================
@@ -594,7 +652,9 @@ def cover_letter_download_pdf(request: Request, data: CoverLetterPdfRequest, use
     except Exception as e:
         logger.error("Cover letter PDF generation failed: %s", e)
         raise HTTPException(status_code=500, detail="PDF generation failed. Please try again.")
-    slug = data.companyName.lower().replace(" ", "-") if data.companyName else "cover-letter"
+    import re as _re
+    raw_slug = data.companyName.lower().replace(" ", "-") if data.companyName else "cover-letter"
+    slug = _re.sub(r"[^a-z0-9\-]", "", raw_slug)[:60] or "cover-letter"
     filename = f"cover-letter-{slug}.pdf"
     return FastAPIResponse(
         content=pdf_bytes,
