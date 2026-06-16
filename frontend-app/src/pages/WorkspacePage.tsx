@@ -8,6 +8,7 @@ import { ScanTab } from '../features/workspace/ScanTab'
 import { OptimizeTab } from '../features/workspace/OptimizeTab'
 import { CoverLetterTab } from '../features/workspace/CoverLetterTab'
 import { LinkedInTab } from '../features/workspace/LinkedInTab'
+import { SummaryTab } from '../features/workspace/SummaryTab'
 import { UpgradePrompt } from '../features/workspace/shared'
 import type { Tab } from '../features/workspace/shared'
 import { useIsMobile } from '../hooks/useIsMobile'
@@ -30,7 +31,7 @@ const STEPS: { id: Tab; label: string; short: string }[] = [
 ]
 
 const TAB_TO_STEP: Record<Tab, number> = {
-  'dashboard': 1, 'scan': 2, 'optimize': 3, 'cover-letter': 4, 'linkedin': 5,
+  'dashboard': 1, 'scan': 2, 'optimize': 3, 'cover-letter': 4, 'linkedin': 5, 'summary': 6,
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -185,6 +186,21 @@ export function WorkspacePage() {
     )
   }, [resumeText, jobDescription, targetRole])
 
+  const handleNewRole = useCallback(() => {
+    setJobDescription('')
+    setScanResult(null)
+    setOptimizeResult(null)
+    setOptimizedScore(null)
+    setCoverLetter('')
+    setLinkedin(null)
+    setStreamingOptimize('')
+    setOptimizeStatus('')
+    setIsOptimizing(false)
+    setIsStreamingCover(false)
+    setIsStreamingLinkedIn(false)
+    setActiveTab('dashboard')
+  }, [])
+
   // ── Early return ──────────────────────────────────────────────────────────
   if (loading || !user) return null
 
@@ -254,7 +270,7 @@ export function WorkspacePage() {
         if (!isPro) return { msg: 'LinkedIn Optimizer is a Pro feature', btn: 'Upgrade to Pro →', action: () => navigate('/pricing'), disabled: false }
         return { msg: 'AI crafts a keyword-rich headline and About section', btn: 'Optimize LinkedIn', action: runLinkedIn, disabled: false }
       }
-      return { msg: '🎉 Your complete application package is ready', btn: null, action: null, disabled: true }
+      return { msg: 'Your complete package is ready — resume, cover letter, and LinkedIn all set', btn: 'View package →', action: () => setActiveTab('summary'), disabled: false }
     }
 
     return { msg: null, btn: null, action: null, disabled: true }
@@ -471,6 +487,22 @@ export function WorkspacePage() {
                 />
           )}
 
+          {/* Summary: completion page */}
+          {activeTab === 'summary' && (
+            <ErrorBoundary tabName="Summary">
+              <SummaryTab
+                scanResult={scanResult}
+                optimizedScore={optimizedScore}
+                optimizeResult={optimizeResult}
+                coverLetter={coverLetter}
+                linkedin={linkedin}
+                companyName={companyName}
+                resumeFileName={resumeFileName}
+                onNewRole={handleNewRole}
+              />
+            </ErrorBoundary>
+          )}
+
         </div>
       </main>
 
@@ -543,10 +575,13 @@ function PasteResumeArea({ onPasteResume }: { onPasteResume: (text: string) => v
   const [value, setValue] = useState('')
   const atLimit = value.length >= MAX_RESUME_CHARS
   return (
-    <div style={{ marginTop: 8 }}>
+    <div>
+      <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 4px', textAlign: 'center' }}>
+        or paste text below
+      </p>
       <textarea
         value={value}
-        placeholder="Or paste your resume text here…"
+        placeholder="Paste your resume text here…"
         maxLength={MAX_RESUME_CHARS}
         rows={3}
         onChange={e => {
@@ -563,10 +598,7 @@ function PasteResumeArea({ onPasteResume }: { onPasteResume: (text: string) => v
         }}
       />
       {value.length > 0 && (
-        <div style={{
-          textAlign: 'right', fontSize: 10, marginTop: 2,
-          color: atLimit ? 'var(--danger)' : 'var(--text-muted)',
-        }}>
+        <div style={{ textAlign: 'right', fontSize: 10, marginTop: 2, color: atLimit ? 'var(--danger)' : 'var(--text-muted)' }}>
           {value.length.toLocaleString()} / {MAX_RESUME_CHARS.toLocaleString()}
         </div>
       )}
@@ -596,139 +628,187 @@ function SetupStep({
   isUploading, wordCount, isMobile,
   onUploadClick, onJDChange, onCompanyChange, onTargetRoleChange, onPasteResume,
 }: SetupStepProps) {
-  const hasJd = jobDescription.trim().length > 0
+  const hasJd     = jobDescription.trim().length > 0
+  const hasResume = !!resumeText
 
   return (
     <div>
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', margin: 0 }}>
-          {resumeText ? 'Your setup' : 'Let\'s get started'}
+
+      {/* Section heading */}
+      <div style={{ marginBottom: 18 }}>
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-heading)', margin: '0 0 4px' }}>
+          {hasResume ? 'Your setup' : "Let's get started"}
         </h1>
-        <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '6px 0 0' }}>
-          {resumeText
-            ? 'Resume loaded — add a job description to enable ATS scoring'
-            : 'Upload your resume and paste a job description to begin'}
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+          {hasResume
+            ? 'Resume loaded — add a job description to run your ATS scan'
+            : 'Upload your resume and add a job description to get started'}
         </p>
       </div>
 
       {/* ── Resume + JD grid ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 12 }}>
 
-        {/* Resume zone */}
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Resume
+        {/* ── Resume card ── */}
+        <div style={{
+          border: `1px ${hasResume || isUploading ? 'solid' : 'dashed'} ${hasResume ? 'var(--success)' : 'var(--border-input)'}`,
+          borderRadius: 12, overflow: 'hidden',
+          background: 'var(--surface-0)',
+          transition: 'border-color 0.15s',
+        }}>
+          {/* Header row */}
+          <div style={{
+            padding: '9px 14px', borderBottom: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Resume</span>
+            {isUploading && (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Reading…</span>
+            )}
+            {hasResume && !isUploading && (
+              <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path d="M2 6L5 9L10 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Ready
+              </span>
+            )}
           </div>
-          <button
-            onClick={onUploadClick}
-            disabled={isUploading}
-            style={{
-              width: '100%', minHeight: 152,
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
-              background: resumeText ? 'var(--success-light)' : 'var(--surface-1)',
-              border: `1px ${resumeText ? 'solid var(--success)' : 'dashed var(--border-input)'}`,
-              borderRadius: 12, cursor: isUploading ? 'default' : 'pointer',
-              textAlign: 'center', padding: 16, transition: 'background 0.15s',
-            }}
-          >
+          {/* Body */}
+          <div style={{ padding: 14 }}>
             {isUploading ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 64, color: 'var(--text-muted)', fontSize: 13 }}>
+                Reading file…
+              </div>
+            ) : hasResume ? (
               <>
-                <span style={{ fontSize: 24 }}>⏳</span>
-                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Reading file…</span>
-              </>
-            ) : resumeText ? (
-              <>
-                <span style={{ fontSize: 22 }}>✅</span>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>{resumeFileName || 'Resume loaded'}</div>
-                <div style={{ fontSize: 11, color: 'var(--success)' }}>{wordCount} words · click to change</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--surface-1)', borderRadius: 8 }}>
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0, color: 'var(--success)' }} aria-hidden="true">
+                    <path d="M11 2H5a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M11 2v6h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M7 13h6M7 10.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                  </svg>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 1px' }}>
+                      {resumeFileName || 'Pasted resume'}
+                    </p>
+                    <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>{wordCount} words</p>
+                  </div>
+                </div>
+                <button
+                  onClick={onUploadClick}
+                  style={{ background: 'none', border: 'none', padding: 0, marginTop: 10, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                    <path d="M9 1.5l1.5 1.5-7 7H2V8.5l7-7z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Change
+                </button>
               </>
             ) : (
               <>
-                <span style={{ fontSize: 26, color: 'var(--text-muted)' }}>⬆</span>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>Upload Resume</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>PDF or DOCX · max 5 MB</div>
+                <button
+                  onClick={onUploadClick}
+                  style={{
+                    width: '100%', background: 'none', border: 'none',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    gap: 6, cursor: 'pointer', padding: '16px 0',
+                  }}
+                >
+                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none" style={{ color: 'var(--text-muted)' }} aria-hidden="true">
+                    <path d="M11 14V4M11 4L7 8M11 4l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M3 16v1a2 2 0 002 2h12a2 2 0 002-2v-1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 2px', textAlign: 'center' }}>Paste or upload resume</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0, textAlign: 'center' }}>PDF, DOCX · max 5 MB</p>
+                  </div>
+                </button>
+                <PasteResumeArea onPasteResume={onPasteResume} />
               </>
             )}
-          </button>
-          {!resumeText && !isUploading && (
-            <PasteResumeArea onPasteResume={onPasteResume} />
-          )}
+          </div>
         </div>
 
-        {/* JD zone */}
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Job Description
-          </div>
+        {/* ── Job description card ── */}
+        <div style={{
+          border: `1px ${hasJd ? 'solid' : 'dashed'} ${hasJd ? 'var(--success)' : 'var(--border-input)'}`,
+          borderRadius: 12, overflow: 'hidden',
+          background: 'var(--surface-0)',
+          transition: 'border-color 0.15s',
+          display: 'flex', flexDirection: 'column',
+        }}>
+          {/* Header row */}
           <div style={{
-            border: `1px solid ${hasJd ? 'var(--success)' : 'var(--border-input)'}`,
-            borderRadius: 12, overflow: 'hidden',
-            background: hasJd ? 'var(--success-light)' : 'var(--surface-1)',
-            transition: 'border-color 0.15s, background 0.15s',
+            padding: '9px 14px', borderBottom: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
-            <textarea
-              value={jobDescription}
-              onChange={e => onJDChange(e.target.value)}
-              maxLength={MAX_JD_CHARS}
-              placeholder={'Paste the full job description here…\n\nEnables ATS keyword scoring and tailored optimization'}
-              rows={7}
-              style={{
-                width: '100%', border: 'none', outline: 'none', background: 'transparent',
-                padding: '12px 14px', fontSize: 12, color: 'var(--text-primary)',
-                fontFamily: 'var(--font-sans)', lineHeight: 1.5, resize: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-            <div style={{
-              display: 'flex', justifyContent: 'flex-end',
-              padding: '2px 10px 6px', fontSize: 10,
-              color: jobDescription.length > MAX_JD_CHARS * 0.9 ? 'var(--danger)' : 'var(--text-muted)',
-            }}>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Job description</span>
+            <span style={{ fontSize: 11, color: jobDescription.length > MAX_JD_CHARS * 0.9 ? 'var(--danger)' : 'var(--text-muted)' }}>
               {jobDescription.length.toLocaleString()} / {MAX_JD_CHARS.toLocaleString()}
-            </div>
+            </span>
           </div>
+          {/* Textarea */}
+          <textarea
+            value={jobDescription}
+            onChange={e => onJDChange(e.target.value)}
+            maxLength={MAX_JD_CHARS}
+            placeholder={'Paste from LinkedIn, Indeed, or the company site…\n\nEnables ATS keyword scoring and tailored optimization'}
+            rows={7}
+            style={{
+              flex: 1, width: '100%', border: 'none', outline: 'none', background: 'transparent',
+              padding: '12px 14px', fontSize: 12, color: 'var(--text-primary)',
+              fontFamily: 'var(--font-sans)', lineHeight: 1.5, resize: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
         </div>
+
       </div>
 
-      {/* ── Optional fields (shown once user has either resume or JD) ── */}
-      {(hasJd || resumeText) && (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
+      {/* ── Job context card (always visible) ── */}
+      <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 14px' }}>
+        <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
+            <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.2"/>
+            <path d="M6.5 5.5v4M6.5 4h.01" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+          </svg>
+          Job context (optional) — improves cover letter and LinkedIn output
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 8 }}>
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 5 }}>
-              Company name <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional — used in cover letter)</span>
-            </label>
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 4px' }}>Company name</p>
             <input
               type="text"
               value={companyName}
               onChange={e => onCompanyChange(e.target.value)}
-              placeholder="e.g. TechCorp"
+              placeholder="e.g. Google, Stripe…"
               style={{
-                width: '100%', padding: '8px 12px', fontSize: 13,
+                width: '100%', padding: '7px 10px', fontSize: 12,
                 border: '1px solid var(--border-input)', borderRadius: 8,
-                background: 'var(--surface-1)', color: 'var(--text-primary)',
+                background: 'var(--surface-0)', color: 'var(--text-primary)',
                 outline: 'none', boxSizing: 'border-box',
               }}
             />
           </div>
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 5 }}>
-              Target role <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional — for LinkedIn)</span>
-            </label>
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 4px' }}>Target role</p>
             <input
               type="text"
               value={targetRole}
               onChange={e => onTargetRoleChange(e.target.value)}
-              placeholder="e.g. Senior Operations Director"
+              placeholder="e.g. Senior Engineer…"
               style={{
-                width: '100%', padding: '8px 12px', fontSize: 13,
+                width: '100%', padding: '7px 10px', fontSize: 12,
                 border: '1px solid var(--border-input)', borderRadius: 8,
-                background: 'var(--surface-1)', color: 'var(--text-primary)',
+                background: 'var(--surface-0)', color: 'var(--text-primary)',
                 outline: 'none', boxSizing: 'border-box',
               }}
             />
           </div>
         </div>
-      )}
+      </div>
+
     </div>
   )
 }
