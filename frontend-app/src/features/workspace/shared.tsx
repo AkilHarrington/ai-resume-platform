@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 
+export type Tab = 'dashboard' | 'scan' | 'optimize' | 'cover-letter' | 'linkedin'
+
 export function LoadingCard({ message }: { message: string }) {
   return (
     <div style={{

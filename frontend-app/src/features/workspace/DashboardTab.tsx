@@ -441,13 +441,17 @@ export function DashboardTab({
               color="var(--success)"
             />
           )}
-          {optimizeResult?.keywordsAdded?.length != null && (
-            <MetricCard
-              label="Keywords Added"
-              value={optimizeResult.keywordsAdded.length}
-              sub="from job description"
-            />
-          )}
+          {optimizeResult && (() => {
+            const afterSet = new Set(optimizeResult.missingKeywordsAfter.map(k => k.toLowerCase()))
+            const added = optimizeResult.missingKeywordsBefore.filter(k => !afterSet.has(k.toLowerCase())).length
+            return added > 0 ? (
+              <MetricCard
+                label="Keywords Added"
+                value={added}
+                sub="from job description"
+              />
+            ) : null
+          })()}
         </div>
       )}
 

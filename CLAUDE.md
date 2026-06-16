@@ -64,7 +64,7 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
   - `src/features/workspace/OptimizeTab.tsx` — resume optimizer, before/after scores, PDF download
   - `src/features/workspace/CoverLetterTab.tsx` — cover letter generator
   - `src/features/workspace/LinkedInTab.tsx` — LinkedIn headline + About optimizer
-  - `src/pages/WorkspacePage.tsx` — thin shell, imports from feature files
+  - `src/pages/WorkspacePage.tsx` — **guided 5-step flow** (see session 12 below)
 - **Principal code review — all 28 actionable issues resolved**:
   - CRITICAL: sync def handlers (thread pool, no event loop blocking), fabricated +3 removed, /health checks real deps
   - HIGH: singleton clients, silent excepts removed, Router.navigate, max_tokens 8192, rate limit pro-status, structured logging, prompt injection XML delimiters, startup env validation, 26-test pytest suite
@@ -80,6 +80,14 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
   - Toggle button in both workspace header and landing page nav
   - All pages updated: LandingPage, WorkspacePage, LoginPage, SignupPage, PricingPage, PrivacyPage, TermsPage, all workspace tabs
   - TypeScript clean (0 errors) after full migration
+
+- **Guided 5-step workspace redesign (session 12)**:
+  - `DashboardTab.tsx` — deprecated (no longer imported); replaced by `SetupStep` inline in WorkspacePage
+  - `WorkspacePage.tsx` fully rewritten: 5-step indicator bar (dots + lines, green when done) + minimal nav row (logo, PRO badge, email, theme, sign out) + `SetupStep` for step 1 (resume upload zone + JD textarea + optional company/targetRole) + contextual `NextBanner` at bottom (always tells user exactly what to do next)
+  - NextBanner logic: no resume → "Upload" | step 1 no JD → disabled | step 1 + JD → "Run ATS Scan" | step 2 → "Optimize →" | step 3 → "Generate Cover Letter →" | step 4 → "Optimize LinkedIn →" | step 5 done → "All done 🎉"
+  - JD drawer removed — JD textarea lives inline on Step 1
+  - Mobile: step number bar at bottom replaces old icon tab bar
+  - 0 TypeScript errors
 
 ### 🔲 Next session
 1. **Add Anthropic API credits** (blocker — nothing AI works without this)

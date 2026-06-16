@@ -1,9 +1,122 @@
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ScoreRing } from '../../components/ScoreRing'
 import { KeywordPill } from '../../components/KeywordPill'
-import { LoadingCard, EmptyState } from './shared'
+import { EmptyState } from './shared'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import type { ScanResult } from '../../api/resumeApi'
+
+// ─── Scan loading skeleton — step indicator + content preview ─────────────────
+
+function ScanStepSkeleton() {
+  const isMobile = useIsMobile()
+  const [activeStep, setActiveStep] = useState(0)
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setActiveStep(1), 2500)
+    const t2 = setTimeout(() => setActiveStep(2), 6000)
+    const t3 = setTimeout(() => setActiveStep(3), 13000)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+  }, [])
+
+  const steps = ['Reading your resume', 'Matching keywords', 'AI scoring', 'Building report']
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'fadeIn 0.2s ease' }}>
+
+      {/* ── Step progress ── */}
+      <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: '20px 24px', border: '1px solid var(--border)' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 14 }}>Analyzing your resume…</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {steps.map((label, i) => {
+            const done   = i < activeStep
+            const active = i === activeStep
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10, fontWeight: 700,
+                  background: done   ? 'var(--success-light)' : active ? 'var(--navy)' : 'var(--surface-2)',
+                  color:      done   ? 'var(--success)'       : active ? 'white'       : 'var(--text-muted)',
+                  transition: 'background 0.4s ease, color 0.4s ease',
+                }}>
+                  {done ? '✓' : i + 1}
+                </div>
+                <span style={{
+                  fontSize: 13,
+                  fontWeight: active ? 600 : 400,
+                  color: done ? 'var(--text-muted)' : active ? 'var(--text-primary)' : 'var(--text-muted)',
+                  transition: 'color 0.4s ease',
+                }}>
+                  {label}
+                </span>
+                {active && (
+                  <span style={{
+                    display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+                    background: 'var(--navy)', marginLeft: 2,
+                    animation: 'pulse 1s ease-in-out infinite',
+                  }} />
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Score card skeleton ── */}
+      <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: isMobile ? 20 : 28, border: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 16 : 32, flexWrap: 'wrap' }}>
+          <div style={{
+            width: isMobile ? 80 : 110, height: isMobile ? 80 : 110,
+            borderRadius: '50%', flexShrink: 0,
+            background: 'var(--surface-2)',
+            animation: 'pulse 1.5s ease-in-out infinite',
+          }} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ height: 18, width: '55%', borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out 0.1s infinite' }} />
+            <div style={{ height: 12, width: '90%', borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out 0.2s infinite' }} />
+            <div style={{ height: 12, width: '70%', borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out 0.3s infinite' }} />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Score breakdown skeleton ── */}
+      <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: isMobile ? 16 : 24, border: '1px solid var(--border)' }}>
+        <div style={{ height: 14, width: 120, borderRadius: 4, background: 'var(--surface-2)', marginBottom: 18, animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {[70, 50, 80, 60, 45, 65].map((w, i) => (
+            <div key={i}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div style={{ height: 11, width: `${w}%`, borderRadius: 4, background: 'var(--surface-2)', animation: `pulse 1.5s ease-in-out ${i * 0.06}s infinite` }} />
+                <div style={{ height: 11, width: 24, borderRadius: 4, background: 'var(--surface-2)', animation: `pulse 1.5s ease-in-out ${i * 0.06}s infinite` }} />
+              </div>
+              <div style={{ height: 7, borderRadius: 999, background: 'var(--surface-2)', animation: `pulse 1.5s ease-in-out ${i * 0.06 + 0.1}s infinite` }} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Keyword chips skeleton ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+        {[0, 1].map((ci) => (
+          <div key={ci} style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 20, border: '1px solid var(--border)' }}>
+            <div style={{ height: 13, width: 100, borderRadius: 4, background: 'var(--surface-2)', marginBottom: 14, animation: `pulse 1.5s ease-in-out ${ci * 0.15}s infinite` }} />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {[52, 68, 44, 76, 58, 40, 64, 50, 72, 46].map((w, i) => (
+                <div key={i} style={{
+                  height: 22, width: w,
+                  borderRadius: 999, background: 'var(--surface-2)',
+                  animation: `pulse 1.5s ease-in-out ${(i + ci * 5) * 0.07}s infinite`,
+                }} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ─── Score percentile helper ──────────────────────────────────────────────────
 
@@ -31,7 +144,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
   const navigate = useNavigate()
   const isMobile = useIsMobile()
 
-  if (isLoading) return <LoadingCard message="Claude is evaluating your resume against the job description..." />
+  if (isLoading) return <ScanStepSkeleton />
   if (!result) return (
     <>
       <EmptyState

@@ -1,13 +1,13 @@
 import { useState, useMemo } from 'react'
 import { Button } from '../../components/Button'
 import { ScoreRing } from '../../components/ScoreRing'
-import { LoadingCard, EmptyState, EmptyCard } from './shared'
+import { EmptyState, EmptyCard } from './shared'
 import { useToast } from '../../components/Toast'
 import { useAuth } from '../../app/AuthContext'
 import type { OptimizeResult } from '../../api/resumeApi'
 import type { ResumeTemplate } from '../../types/resumeTemplate'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 // ─── Score percentile helper ──────────────────────────────────────────────────
 
@@ -31,7 +31,6 @@ function computeLineDiff(original: string, optimized: string): DiffLine[] {
   const b = optimized.split('\n')
   const m = a.length, n = b.length
 
-  // LCS table
   const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
@@ -41,7 +40,6 @@ function computeLineDiff(original: string, optimized: string): DiffLine[] {
     }
   }
 
-  // Backtrack
   const result: DiffLine[] = []
   let i = m, j = n
   while (i > 0 || j > 0) {
@@ -134,6 +132,157 @@ function TemplatePreview({ type, selected }: { type: string; selected: boolean }
   )
 }
 
+// ─── Streaming live view (replaces the spinner) ───────────────────────────────
+
+function StreamingResumeView({
+  text,
+  statusMessage,
+  originalScore,
+}: {
+  text: string
+  statusMessage: string
+  originalScore?: number
+}) {
+  const isScoring  = statusMessage.toLowerCase().includes('scoring your improvements')
+  const isWriting  = !isScoring && text.length > 0
+  const isStarting = !text
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'fadeIn 0.2s ease' }}>
+
+      {/* ── Score row — before ring visible immediately ── */}
+      <div style={{
+        background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)',
+        padding: '24px 28px', border: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', gap: 32, flexWrap: 'wrap',
+      }}>
+        {originalScore !== undefined && (
+          <>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Before</div>
+              <ScoreRing score={originalScore} size={80} label="" />
+            </div>
+            <div style={{ fontSize: 26, color: 'var(--border)' }}>→</div>
+          </>
+        )}
+        {/* Pending "After" ring */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>After</div>
+          <div style={{
+            width: 80, height: 80, borderRadius: '50%',
+            border: '3px dashed var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            animation: 'pulse 2s ease-in-out infinite',
+          }}>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>…</span>
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 4 }}>
+            {isScoring  ? '✓ Resume rewritten — scoring improvements…'
+            : isWriting ? 'Claude is rewriting your resume…'
+            :             'Connecting to Claude…'}
+          </div>
+          {/* Step progress indicator — driven by live SSE status messages */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+            {['Keywords', 'Rewriting', 'Scoring', 'Done'].map((label, i) => {
+              const curStep  = isStarting ? 0 : isScoring ? 2 : 1
+              const isDone   = i < curStep
+              const isActive = i === curStep
+              return [
+                <div key={`s${i}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <div style={{
+                    width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 7, fontWeight: 800,
+                    background: isDone ? 'var(--success-light)' : isActive ? 'var(--navy)' : 'var(--surface-2)',
+                    color: isDone ? 'var(--success)' : isActive ? 'white' : 'var(--text-muted)',
+                    transition: 'background 0.3s ease, color 0.3s ease',
+                  }}>
+                    {isDone ? '✓' : i + 1}
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 400, color: isActive ? 'var(--text-primary)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    {label}
+                  </span>
+                </div>,
+                i < 3
+                  ? <div key={`l${i}`} style={{ height: 1, width: 10, background: isDone ? 'var(--success)' : 'var(--border)', transition: 'background 0.3s', flexShrink: 0 }} />
+                  : null,
+              ]
+            }).flat()}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Live text stream ── */}
+      <div style={{
+        background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)',
+        border: '1px solid var(--border)', overflow: 'hidden',
+      }}>
+        {/* Header bar */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '10px 16px', borderBottom: '1px solid var(--border)',
+          background: 'var(--surface-1)',
+        }}>
+          {isScoring ? (
+            <span style={{ fontSize: 13, color: 'var(--success)' }}>✓</span>
+          ) : (
+            <span style={{
+              width: 7, height: 7, borderRadius: '50%',
+              background: isStarting ? 'var(--text-muted)' : 'var(--success)',
+              display: 'inline-block',
+              animation: 'pulse 1s ease-in-out infinite',
+              flexShrink: 0,
+            }} />
+          )}
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+            {isScoring  ? 'Resume complete — scoring in progress'
+            : isWriting ? 'Writing your resume…'
+            :             statusMessage || 'Starting…'}
+          </span>
+        </div>
+
+        {/* Streaming text */}
+        {isStarting ? (
+          /* Skeleton lines shown while waiting for first token (~1-2s) */
+          <div style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[100, 60, 80, 40, 90, 55, 70, 45, 85, 50].map((w, i) => (
+              <div key={i} style={{
+                height: 12, borderRadius: 4,
+                width: `${w}%`,
+                background: 'var(--surface-1)',
+                animation: `pulse 1.5s ease-in-out ${i * 0.08}s infinite`,
+              }} />
+            ))}
+          </div>
+        ) : (
+          <pre style={{
+            whiteSpace: 'pre-wrap',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 13,
+            color: 'var(--text-primary)',
+            lineHeight: 1.75,
+            maxHeight: 440,
+            overflow: 'auto',
+            padding: '16px 20px',
+            margin: 0,
+          }}>
+            {text}
+            {isWriting && (
+              <span style={{
+                display: 'inline-block', width: 2, height: '1em',
+                background: 'var(--navy)', marginLeft: 1, verticalAlign: 'text-bottom',
+                animation: 'blink 1s step-end infinite',
+              }} />
+            )}
+          </pre>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface Props {
@@ -142,24 +291,24 @@ interface Props {
   hasResume: boolean
   onRun: () => void
   error: string
+  streamingText?: string
+  statusMessage?: string
+  originalScore?: number
 }
 
-export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Props) {
-  // All hooks unconditionally at the top
+export function OptimizeTab({ result, isLoading, hasResume, onRun, error, streamingText, statusMessage, originalScore }: Props) {
   const { showToast } = useToast()
   const { session } = useAuth()
   const [view, setView] = useState<'optimized' | 'original' | 'changes'>('optimized')
   const [selectedTemplate, setSelectedTemplate] = useState<ResumeTemplate>('professional')
   const [isDownloading, setIsDownloading] = useState(false)
 
-  // Compute added keywords: present in missingBefore but absent from missingAfter → integrated
   const addedKeywords = useMemo(() => {
     if (!result) return []
     const afterSet = new Set(result.missingKeywordsAfter.map(k => k.toLowerCase()))
     return result.missingKeywordsBefore.filter(k => !afterSet.has(k.toLowerCase()))
   }, [result])
 
-  // Count rewritten bullets (lines starting with a bullet char that changed)
   const bulletChanges = useMemo(() => {
     if (!result) return 0
     const isBullet = (l: string) => /^\s*[•\-–—›»*]/.test(l)
@@ -173,8 +322,6 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
     return changed + Math.max(0, optBullets.length - origBullets.length)
   }, [result])
 
-  // Line diff: computed once when result arrives, not re-computed on every tab switch.
-  // Removing `view` from deps eliminates the O(m×n) LCS allocation on each "± Changes" click.
   const lineDiff = useMemo(() => {
     if (!result) return null
     return computeLineDiff(result.originalResumeText, result.optimizedResumeText)
@@ -188,18 +335,12 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
       if (!token) throw new Error('Not authenticated')
       const resp = await fetch(`${API_BASE}/api/resume/download-pdf`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          resumeText: result.optimizedResumeText,
-          template: selectedTemplate,
-        }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ resumeText: result.optimizedResumeText, template: selectedTemplate }),
       })
       if (!resp.ok) {
         const detail = await resp.json().catch(() => ({}))
-        throw new Error(detail?.detail ?? `Server error ${resp.status}`)
+        throw new Error((detail as { detail?: string }).detail ?? `Server error ${resp.status}`)
       }
       const blob = await resp.blob()
       const url = URL.createObjectURL(blob)
@@ -210,14 +351,25 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
       URL.revokeObjectURL(url)
       showToast('PDF downloaded successfully')
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'PDF generation failed.'
-      showToast(msg, 'error')
+      showToast(err instanceof Error ? err.message : 'PDF generation failed.', 'error')
     } finally {
       setIsDownloading(false)
     }
   }
 
-  if (isLoading) return <LoadingCard message="Claude is optimizing your resume..." />
+  // ── Loading states ────────────────────────────────────────────────────────
+  if (isLoading) {
+    // Show streaming text as soon as first token arrives — no spinner ever
+    return (
+      <StreamingResumeView
+        text={streamingText ?? ''}
+        statusMessage={statusMessage ?? ''}
+        originalScore={originalScore}
+      />
+    )
+  }
+
+  // ── Empty state ───────────────────────────────────────────────────────────
   if (!result) return (
     <EmptyCard>
       <EmptyState icon="✨" title="AI Resume Optimization" subtitle="Claude will rewrite your resume to maximize ATS keyword alignment without fabricating your experience." />
@@ -228,9 +380,10 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
     </EmptyCard>
   )
 
-  const improved = result.scoreImprovement > 0
-  const scoresEqual = result.optimizedScore === result.originalScore && result.originalScore > 0
-  const hasOptimizedText = result.optimizedResumeText && result.optimizedResumeText !== result.originalResumeText
+  // ── Results ───────────────────────────────────────────────────────────────
+  const improved      = result.scoreImprovement > 0
+  const scoresEqual   = result.optimizedScore === result.originalScore && result.originalScore > 0
+  const hasOptimized  = result.optimizedResumeText && result.optimizedResumeText !== result.originalResumeText
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'fadeIn 0.3s ease' }}>
@@ -239,19 +392,12 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
       <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 28, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
         <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)', marginBottom: 20 }}>Optimization Results</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 40, flexWrap: 'wrap' }}>
-
-          {/* Before */}
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>Before</div>
             <ScoreRing score={result.originalScore} size={90} label="" />
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5, fontWeight: 500 }}>
-              {scoreToPercentile(result.originalScore)}
-            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5, fontWeight: 500 }}>{scoreToPercentile(result.originalScore)}</div>
           </div>
-
           <div style={{ fontSize: 32, color: 'var(--gray-200)' }}>→</div>
-
-          {/* After */}
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>After</div>
             {scoresEqual
@@ -259,13 +405,9 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
               : <ScoreRing score={result.optimizedScore} size={90} label="" />
             }
             {!scoresEqual && (
-              <div style={{ fontSize: 11, color: 'var(--emerald)', marginTop: 5, fontWeight: 600 }}>
-                {scoreToPercentile(result.optimizedScore)}
-              </div>
+              <div style={{ fontSize: 11, color: 'var(--emerald)', marginTop: 5, fontWeight: 600 }}>{scoreToPercentile(result.optimizedScore)}</div>
             )}
           </div>
-
-          {/* Headline */}
           <div style={{ flex: 1, paddingLeft: 20, minWidth: 160 }}>
             {improved ? (
               <>
@@ -286,38 +428,17 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
           </div>
         </div>
 
-        {/* ── Keyword Delta ── */}
         {(addedKeywords.length > 0 || bulletChanges > 0) && (
-          <div style={{
-            marginTop: 20,
-            paddingTop: 18,
-            borderTop: '1px solid var(--gray-100)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 10,
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              What Claude changed
-            </div>
+          <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--gray-100)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>What Claude changed</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
               {addedKeywords.map(kw => (
-                <span key={kw} style={{
-                  fontSize: 12, fontWeight: 600,
-                  color: 'var(--emerald)', background: 'var(--success-light)',
-                  border: '1px solid var(--emerald)',
-                  borderRadius: 999, padding: '3px 10px',
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                }}>
+                <span key={kw} style={{ fontSize: 12, fontWeight: 600, color: 'var(--emerald)', background: 'var(--success-light)', border: '1px solid var(--emerald)', borderRadius: 999, padding: '3px 10px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   <span style={{ fontSize: 10 }}>+</span>{kw}
                 </span>
               ))}
               {bulletChanges > 0 && (
-                <span style={{
-                  fontSize: 12, fontWeight: 600,
-                  color: 'var(--text-heading)', background: 'rgba(26,54,93,0.07)',
-                  border: '1px solid rgba(26,54,93,0.15)',
-                  borderRadius: 999, padding: '3px 10px',
-                }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-heading)', background: 'rgba(26,54,93,0.07)', border: '1px solid rgba(26,54,93,0.15)', borderRadius: 999, padding: '3px 10px' }}>
                   ✏️ {bulletChanges} bullet{bulletChanges !== 1 ? 's' : ''} rewritten
                 </span>
               )}
@@ -327,7 +448,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
       </div>
 
       {/* ── Resume Text + Diff ── */}
-      {hasOptimizedText && (
+      {hasOptimized && (
         <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)' }}>Your Optimized Resume</h3>
@@ -347,51 +468,32 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
           </div>
 
           {view === 'changes' && lineDiff ? (
-            <div style={{
-              fontFamily: 'var(--font-sans)', fontSize: 12.5,
-              lineHeight: 1.75, maxHeight: 440, overflow: 'auto',
-              padding: '12px 16px', background: 'var(--surface-1)', borderRadius: 'var(--radius)',
-              borderLeft: '3px solid var(--gray-200)',
-            }}>
+            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, lineHeight: 1.75, maxHeight: 440, overflow: 'auto', padding: '12px 16px', background: 'var(--surface-1)', borderRadius: 'var(--radius)', borderLeft: '3px solid var(--gray-200)' }}>
               {lineDiff.map((line, i) => {
-                if (line.type === 'same' && !line.text.trim()) return (
-                  <div key={i} style={{ height: 6 }} />
-                )
+                if (line.type === 'same' && !line.text.trim()) return <div key={i} style={{ height: 6 }} />
                 return (
-                  <div key={i} style={{
-                    padding: '1px 8px',
-                    marginLeft: -8,
-                    borderRadius: 3,
-                    background: line.type === 'add' ? '#ECFDF5' : line.type === 'remove' ? '#FEF2F2' : 'transparent',
-                    color: line.type === 'add' ? '#065F46' : line.type === 'remove' ? '#991B1B' : 'var(--charcoal)',
-                    textDecoration: line.type === 'remove' ? 'line-through' : 'none',
-                    opacity: line.type === 'remove' ? 0.7 : 1,
-                    display: 'flex',
-                    gap: 8,
-                  }}>
-                    <span style={{ width: 12, flexShrink: 0, fontWeight: 700, userSelect: 'none' }}>
-                      {line.type === 'add' ? '+' : line.type === 'remove' ? '−' : ' '}
-                    </span>
+                  <div key={i} style={{ padding: '1px 8px', marginLeft: -8, borderRadius: 3, background: line.type === 'add' ? '#ECFDF5' : line.type === 'remove' ? '#FEF2F2' : 'transparent', color: line.type === 'add' ? '#065F46' : line.type === 'remove' ? '#991B1B' : 'var(--charcoal)', textDecoration: line.type === 'remove' ? 'line-through' : 'none', opacity: line.type === 'remove' ? 0.7 : 1, display: 'flex', gap: 8 }}>
+                    <span style={{ width: 12, flexShrink: 0, fontWeight: 700, userSelect: 'none' }}>{line.type === 'add' ? '+' : line.type === 'remove' ? '−' : ' '}</span>
                     <span>{line.text || ' '}</span>
                   </div>
                 )
               })}
             </div>
           ) : (
-            <pre style={{
-              whiteSpace: 'pre-wrap', fontFamily: 'var(--font-sans)', fontSize: 13,
-              color: 'var(--text-primary)', lineHeight: 1.7, maxHeight: 400,
-              overflow: 'auto', padding: 16, background: 'var(--surface-1)', borderRadius: 'var(--radius)',
-            }}>
+            <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.7, maxHeight: 400, overflow: 'auto', padding: 16, background: 'var(--surface-1)', borderRadius: 'var(--radius)' }}>
               {view === 'optimized' ? result.optimizedResumeText : result.originalResumeText}
             </pre>
           )}
 
           <Button
             style={{ marginTop: 12 }} size="sm" variant="outline"
-            onClick={() => {
-              navigator.clipboard.writeText(result.optimizedResumeText)
-              showToast('Copied to clipboard')
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(result.optimizedResumeText)
+                showToast('Copied to clipboard')
+              } catch {
+                showToast('Copy failed — please select and copy manually.', 'error')
+              }
             }}
           >
             📋 Copy to Clipboard
@@ -399,8 +501,8 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
         </div>
       )}
 
-      {/* ── PDF Template Picker + Download ── */}
-      {hasOptimizedText && (
+      {/* ── PDF Download ── */}
+      {hasOptimized && (
         <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 6 }}>Download as PDF</h3>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>Choose a template and download your optimized resume as a polished PDF.</p>
@@ -408,47 +510,19 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error }: Prop
             {TEMPLATE_OPTIONS.map(t => {
               const selected = selectedTemplate === t.id
               return (
-                <button
-                  key={t.id}
-                  onClick={() => setSelectedTemplate(t.id)}
-                  style={{
-                    flex: 1, padding: '14px 10px', borderRadius: 'var(--radius)',
-                    border: `2px solid ${selected ? 'var(--navy)' : 'var(--gray-200)'}`,
-                    background: selected ? 'var(--navy)' : 'white',
-                    color: selected ? 'white' : 'var(--charcoal)',
-                    cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s ease',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-                  }}
-                >
+                <button key={t.id} onClick={() => setSelectedTemplate(t.id)} style={{ flex: 1, padding: '14px 10px', borderRadius: 'var(--radius)', border: `2px solid ${selected ? 'var(--navy)' : 'var(--gray-200)'}`, background: selected ? 'var(--navy)' : 'white', color: selected ? 'white' : 'var(--charcoal)', cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s ease', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                   <TemplatePreview type={t.preview} selected={selected} />
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, marginBottom: 2 }}>
                       <span style={{ fontWeight: 700, fontSize: 12 }}>{t.label}</span>
-                      <span style={{
-                        fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
-                        color: selected ? 'rgba(255,255,255,0.9)' : 'var(--navy)',
-                        background: selected ? 'rgba(255,255,255,0.2)' : 'rgba(30,58,95,0.08)',
-                        borderRadius: 4, padding: '1px 5px',
-                      }}>{t.badge}</span>
+                      <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: selected ? 'rgba(255,255,255,0.9)' : 'var(--navy)', background: selected ? 'rgba(255,255,255,0.2)' : 'rgba(30,58,95,0.08)', borderRadius: 4, padding: '1px 5px' }}>{t.badge}</span>
                     </div>
-                    <div style={{ fontSize: 10, color: selected ? 'rgba(255,255,255,0.65)' : 'var(--gray-400)', lineHeight: 1.4 }}>
-                      {t.description}
-                    </div>
+                    <div style={{ fontSize: 10, color: selected ? 'rgba(255,255,255,0.65)' : 'var(--gray-400)', lineHeight: 1.4 }}>{t.description}</div>
                   </div>
                 </button>
               )
             })}
           </div>
-
-          {/* Template note */}
-          <div style={{
-            marginBottom: 16, padding: '12px 16px',
-            background: 'var(--surface-1)', borderRadius: 'var(--radius)',
-            border: '1px solid var(--border)', fontSize: 13, color: 'var(--text-secondary)',
-          }}>
-            📄 Select a template above, then click Download PDF — your optimized resume will be generated server-side and downloaded instantly.
-          </div>
-
           <Button size="md" variant="secondary" onClick={handleDownloadPDF} disabled={isDownloading} style={{ minWidth: 180 }}>
             {isDownloading ? '⏳ Generating PDF...' : '⬇️ Download PDF'}
           </Button>

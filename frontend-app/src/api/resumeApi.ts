@@ -100,9 +100,87 @@ export async function scanResume(resumeText: string, jobDescription?: string): P
   return data
 }
 
-export async function optimizeResume(resumeText: string, jobDescription?: string): Promise<OptimizeResult> {
-  const { data } = await api.post<OptimizeResult>('/api/resume/optimize', { resumeText, jobDescription })
-  return data
+export function streamOptimize(
+  params: {
+    resumeText: string
+    jobDescription?: string
+    existingScore?: number
+    existingKeywords?: string[]
+  },
+  onStatus: (msg: string) => void,
+  onToken: (chunk: string) => void,
+  onResult: (result: OptimizeResult) => void,
+  onDone: () => void,
+  onError: (msg: string) => void,
+): Promise<void> {
+  return (async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    let response: Response
+    try {
+      response = await fetch(`${API_BASE_URL}/api/resume/optimize/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify(params),
+      })
+    } catch {
+      onError('Could not reach the server. Check your connection and try again.')
+      return
+    }
+
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({ detail: 'Request failed' }))
+      if (response.status === 401) { onError('Session expired. Please sign in again.'); return }
+      if (response.status === 403) { onError('This feature requires a Pro plan.'); return }
+      if (response.status === 429) { onError('Too many requests. Please wait a moment and try again.'); return }
+      onError((detail as { detail?: string }).detail || 'Optimization failed')
+      return
+    }
+
+    if (!response.body) {
+      onError('Server returned a response with no body. Please try again.')
+      return
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const payload = line.slice(6)
+        try {
+          const parsed = JSON.parse(payload) as Record<string, unknown>
+          if (parsed['type'] === 'error') { onError((parsed['message'] as string) || 'Optimization failed'); return }
+          if (parsed['type'] === 'status') onStatus((parsed['message'] as string) || '')
+          if (parsed['type'] === 'token') onToken((parsed['text'] as string) || '')
+          if (parsed['type'] === 'result') {
+            onResult({
+              originalScore:        parsed['originalScore'] as number,
+              optimizedScore:       parsed['optimizedScore'] as number,
+              scoreImprovement:     parsed['scoreImprovement'] as number,
+              originalResumeText:   parsed['originalResumeText'] as string,
+              optimizedResumeText:  parsed['optimizedResumeText'] as string,
+              missingKeywordsBefore: (parsed['missingKeywordsBefore'] as string[]) ?? [],
+              missingKeywordsAfter:  (parsed['missingKeywordsAfter'] as string[]) ?? [],
+              matchIntelligence:    (parsed['matchIntelligence'] as Record<string, unknown>) ?? {},
+              optimizationGuidance: (parsed['optimizationGuidance'] as OptimizeResult['optimizationGuidance']) ?? null,
+            })
+          }
+          if (parsed['type'] === 'done') { onDone(); return }
+        } catch { /* skip malformed lines */ }
+      }
+    }
+    onDone()
+  })()
 }
 
 export async function generateCoverLetter(params: {
