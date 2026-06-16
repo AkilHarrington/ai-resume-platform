@@ -222,7 +222,12 @@ export function WorkspacePage() {
       if (scanMutation.isPending) return { msg: 'Scanning your resume…', btn: null, action: null, disabled: true }
       if (!scanResult) return { msg: null, btn: null, action: null, disabled: true }
       const score = scanResult.overallScore ?? 0
-      return { msg: `Score of ${score} — AI can rewrite your bullets to reach 80+`, btn: 'Optimize Resume →', action: () => setActiveTab('optimize'), disabled: false }
+      const optimizeMsg = score >= 80
+        ? `Score of ${score} — AI can fine-tune your keyword alignment for this role`
+        : score >= 60
+          ? `Score of ${score} — AI can strengthen your keyword match for this role`
+          : `Score of ${score} — AI can rewrite your bullets to better match this role`
+      return { msg: optimizeMsg, btn: 'Optimize Resume →', action: () => { setActiveTab('optimize'); if (!optimizeResult && !isOptimizing) runOptimize() }, disabled: false }
     }
 
     if (currentStep === 3) {
