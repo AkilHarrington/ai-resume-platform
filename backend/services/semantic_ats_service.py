@@ -10,6 +10,7 @@ import os
 import re
 
 import anthropic
+import httpx
 
 from services.exceptions import AIUnavailableError
 
@@ -42,7 +43,10 @@ def _get_client() -> anthropic.Anthropic:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             raise RuntimeError("ANTHROPIC_API_KEY is not set.")
-        _client = anthropic.Anthropic(api_key=api_key)
+        _client = anthropic.Anthropic(
+            api_key=api_key,
+            timeout=httpx.Timeout(120.0, connect=10.0),
+        )
     return _client
 
 

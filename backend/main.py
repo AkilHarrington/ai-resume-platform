@@ -27,7 +27,6 @@ from services.ats_service import calculate_ats_score
 from services.semantic_ats_service import semantic_ats_score
 from fastapi.responses import StreamingResponse
 from services.resume_service import (
-    optimize_resume_text,
     stream_resume_optimization,
     generate_cover_letter,
     generate_linkedin_optimization,
@@ -145,7 +144,7 @@ if not allowed_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
@@ -443,8 +442,9 @@ async def resume_optimize_stream(request: Request, data: ResumeOptimizeRequest, 
             if job_description.strip():
                 improved_ats = semantic_ats_score(optimized_text, job_description)
                 if improved_ats.get("ats_score", 0) == 0 and original_score > 0:
-                    logger.warning("First re-score returned 0 — retrying once.")
-                    improved_ats = semantic_ats_score(optimized_text, job_description)
+                    # Score of 0 likely means a parse/transport failure — fall through
+                    # to keyword-diff fallback rather than wasting a duplicate call.
+                    logger.warning("Re-score returned 0 — falling through to keyword-diff fallback.")
             else:
                 improved_ats = calculate_ats_score(optimized_text, job_description)
             improved_score = improved_ats.get("ats_score", 0)
@@ -468,7 +468,7 @@ async def resume_optimize_stream(request: Request, data: ResumeOptimizeRequest, 
                     improved_ats = {**original_ats, "ats_score": improved_score}
 
             # Cap credibility ceiling
-            max_allowed = 15 if original_score < 60 else (15 if original_score < 75 else 12)
+            max_allowed = 15 if original_score < 75 else 12
             if not scorer_failed and improved_score - original_score > max_allowed:
                 improved_score = original_score + max_allowed
                 improved_ats = {**improved_ats, "ats_score": improved_score}
@@ -673,6 +673,7 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 
 @app.post("/api/payments/create-checkout-session")
+@limiter.limit("10/minute")
 def create_checkout_session(request: Request, plan: str = "monthly", user: dict = Depends(get_current_user)):
     if not stripe.api_key:
         raise HTTPException(status_code=503, detail="Payment system not configured yet.")
@@ -717,7 +718,7 @@ async def stripe_webhook(request: Request):
 
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-    except stripe.errors.SignatureVerificationError:
+    except stripe.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid Stripe signature.")
     except Exception as e:
         # Log detail internally; return generic message to untrusted caller

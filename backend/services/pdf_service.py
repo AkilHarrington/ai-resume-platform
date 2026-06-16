@@ -6,6 +6,7 @@
 
 from io import BytesIO
 from typing import Dict, List, Any
+from xml.sax.saxutils import escape as _xml_escape
 
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.units import inch
@@ -165,13 +166,13 @@ def _build_professional(data: Dict) -> bytes:
 
     # Headline
     if data.get('headline'):
-        story.append(Paragraph(data['headline'], hl_s))
+        story.append(Paragraph(_e(data['headline']), hl_s))
 
     # Contact row
     c = data.get('contact', {})
     parts = [p for p in [c.get('email'), c.get('phone'), c.get('location'), c.get('linkedin')] if p]
     if parts:
-        story.append(Paragraph('   |   '.join(parts), contact_s))
+        story.append(Paragraph('   |   '.join(_e(p) for p in parts), contact_s))
 
     # Emerald rule
     story.append(HRFlowable(width='100%', thickness=1.5, color=EMERALD, spaceAfter=4, spaceBefore=2))
@@ -179,16 +180,16 @@ def _build_professional(data: Dict) -> bytes:
     # Summary
     if data.get('summary'):
         _prof_section(story, 'Professional Summary')
-        story.append(Paragraph(data['summary'], body_s))
+        story.append(Paragraph(_e(data['summary']), body_s))
 
     # Experience
     if data.get('experience'):
         _prof_section(story, 'Professional Experience')
         for job in data['experience']:
-            title_txt = job.get('title', '')
-            company_txt = job.get('company', '')
-            start = job.get('startDate', '') or ''
-            end = job.get('endDate', 'Present') or 'Present'
+            title_txt = _e(job.get('title', ''))
+            company_txt = _e(job.get('company', ''))
+            start = _e(job.get('startDate', '') or '')
+            end = _e(job.get('endDate', 'Present') or 'Present')
             date_txt = f"{start} – {end}" if start else end
 
             # Title + dates side-by-side
@@ -209,29 +210,29 @@ def _build_professional(data: Dict) -> bytes:
                 story.append(Paragraph(company_txt, company_s))
 
             for bullet in job.get('bullets', []):
-                story.append(Paragraph(f"• {bullet}", bullet_s))
+                story.append(Paragraph(f"• {_e(bullet)}", bullet_s))
 
             story.append(Spacer(1, 5))
 
     # Skills
     if data.get('skills'):
         _prof_section(story, 'Skills')
-        skills_text = '   •   '.join(data['skills'])
+        skills_text = '   •   '.join(_e(s) for s in data['skills'])
         story.append(Paragraph(skills_text, skill_s))
 
     # Education
     if data.get('education'):
         _prof_section(story, 'Education')
         for edu in data['education']:
-            story.append(Paragraph(edu.get('institution', ''), edu_inst_s))
+            story.append(Paragraph(_e(edu.get('institution', '')), edu_inst_s))
             if edu.get('degree'):
-                story.append(Paragraph(edu['degree'], edu_deg_s))
+                story.append(Paragraph(_e(edu['degree']), edu_deg_s))
 
     # Certifications
     if data.get('certifications'):
         _prof_section(story, 'Certifications')
         for cert in data['certifications']:
-            story.append(Paragraph(cert.get('name', ''), cert_s))
+            story.append(Paragraph(_e(cert.get('name', '')), cert_s))
 
     doc.build(story)
     return buf.getvalue()
@@ -359,7 +360,7 @@ def _build_modern(data: Dict) -> bytes:
     sidebar.append(Spacer(1, 4))
     sidebar.append(Paragraph(_safe(data, 'fullName'), s_name))
     if data.get('headline'):
-        sidebar.append(Paragraph(data['headline'], s_hl))
+        sidebar.append(Paragraph(_e(data['headline']), s_hl))
 
     # Contact
     c = data.get('contact', {})
@@ -373,27 +374,27 @@ def _build_modern(data: Dict) -> bytes:
     if non_empty:
         sidebar.append(Paragraph('CONTACT', s_sec))
         for icon, val in non_empty:
-            sidebar.append(Paragraph(f"{icon}  {val}", s_contact))
+            sidebar.append(Paragraph(f"{icon}  {_e(val)}", s_contact))
 
     # Skills
     if data.get('skills'):
         sidebar.append(Paragraph('SKILLS', s_sec))
         for skill in data['skills']:
-            sidebar.append(Paragraph(f"• {skill}", s_skill))
+            sidebar.append(Paragraph(f"• {_e(skill)}", s_skill))
 
     # Education
     if data.get('education'):
         sidebar.append(Paragraph('EDUCATION', s_sec))
         for edu in data['education']:
-            sidebar.append(Paragraph(edu.get('institution', ''), s_edu_inst))
+            sidebar.append(Paragraph(_e(edu.get('institution', '')), s_edu_inst))
             if edu.get('degree'):
-                sidebar.append(Paragraph(edu['degree'], s_edu_deg))
+                sidebar.append(Paragraph(_e(edu['degree']), s_edu_deg))
 
     # Certifications
     if data.get('certifications'):
         sidebar.append(Paragraph('CERTIFICATIONS', s_sec))
         for cert in data['certifications']:
-            sidebar.append(Paragraph(cert.get('name', ''), s_cert))
+            sidebar.append(Paragraph(_e(cert.get('name', '')), s_cert))
 
     # ── Build main story ──────────────────────────────────────────────────────
     main_items: List = []
@@ -407,15 +408,15 @@ def _build_modern(data: Dict) -> bytes:
 
     if data.get('summary'):
         _mod_section_header('Summary')
-        main_items.append(Paragraph(data['summary'], m_body))
+        main_items.append(Paragraph(_e(data['summary']), m_body))
 
     if data.get('experience'):
         _mod_section_header('Experience')
         for job in data['experience']:
-            title_txt  = job.get('title', '')
-            company_txt = job.get('company', '')
-            start = job.get('startDate', '') or ''
-            end   = job.get('endDate', 'Present') or 'Present'
+            title_txt   = _e(job.get('title', ''))
+            company_txt = _e(job.get('company', ''))
+            start = _e(job.get('startDate', '') or '')
+            end   = _e(job.get('endDate', 'Present') or 'Present')
             date_txt = f"{start} – {end}" if start else end
 
             job_row = Table(
@@ -435,7 +436,7 @@ def _build_modern(data: Dict) -> bytes:
                 main_items.append(Paragraph(company_txt, m_company))
 
             for bullet in job.get('bullets', []):
-                main_items.append(Paragraph(f"• {bullet}", m_bullet))
+                main_items.append(Paragraph(f"• {_e(bullet)}", m_bullet))
 
             main_items.append(Spacer(1, 5))
 
@@ -458,7 +459,8 @@ _EXEC_CW      = PAGE_W - _EXEC_LM - _EXEC_RM
 
 
 def _exec_draw_header(canvas, doc, data: Dict):
-    """Draw the full-bleed navy header block on every page."""
+    """Draw the full-bleed navy header block on every page.
+    Canvas drawString uses raw text — no XML escaping needed here."""
     canvas.saveState()
 
     # Navy fill
@@ -572,16 +574,16 @@ def _build_executive(data: Dict) -> bytes:
     # Summary
     if data.get('summary'):
         story += _exec_section_header('Executive Summary')
-        story.append(Paragraph(data['summary'], body_s))
+        story.append(Paragraph(_e(data['summary']), body_s))
 
     # Experience
     if data.get('experience'):
         story += _exec_section_header('Professional Experience')
         for job in data['experience']:
-            title_txt   = job.get('title', '')
-            company_txt = job.get('company', '')
-            start = job.get('startDate', '') or ''
-            end   = job.get('endDate', 'Present') or 'Present'
+            title_txt   = _e(job.get('title', ''))
+            company_txt = _e(job.get('company', ''))
+            start = _e(job.get('startDate', '') or '')
+            end   = _e(job.get('endDate', 'Present') or 'Present')
             date_txt = f"{start} – {end}" if start else end
 
             job_row = Table(
@@ -601,29 +603,29 @@ def _build_executive(data: Dict) -> bytes:
                 story.append(Paragraph(company_txt, company_s))
 
             for bullet in job.get('bullets', []):
-                story.append(Paragraph(f"• {bullet}", bullet_s))
+                story.append(Paragraph(f"• {_e(bullet)}", bullet_s))
 
             story.append(Spacer(1, 6))
 
     # Skills
     if data.get('skills'):
         story += _exec_section_header('Core Competencies')
-        skills_text = '   •   '.join(data['skills'])
+        skills_text = '   •   '.join(_e(s) for s in data['skills'])
         story.append(Paragraph(skills_text, skill_s))
 
     # Education
     if data.get('education'):
         story += _exec_section_header('Education')
         for edu in data['education']:
-            story.append(Paragraph(edu.get('institution', ''), edu_inst_s))
+            story.append(Paragraph(_e(edu.get('institution', '')), edu_inst_s))
             if edu.get('degree'):
-                story.append(Paragraph(edu['degree'], edu_deg_s))
+                story.append(Paragraph(_e(edu['degree']), edu_deg_s))
 
     # Certifications
     if data.get('certifications'):
         story += _exec_section_header('Certifications')
         for cert in data['certifications']:
-            story.append(Paragraph(cert.get('name', ''), cert_s))
+            story.append(Paragraph(_e(cert.get('name', '')), cert_s))
 
     # onFirstPage/onLaterPages must go into build(), not the constructor.
     # SimpleDocTemplate silently ignores them if passed as __init__ kwargs.
@@ -657,13 +659,13 @@ def _build_cover_letter(text: str, company_name: str = "") -> bytes:
     story: List = []
 
     if company_name:
-        story.append(Paragraph(company_name.upper(), company_s))
+        story.append(Paragraph(_e(company_name.upper()), company_s))
 
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
     for p in paragraphs:
         # Collapse internal newlines to spaces (single-line bullets → space-separated)
         p_clean = ' '.join(line.strip() for line in p.splitlines() if line.strip())
-        story.append(Paragraph(p_clean, para_s))
+        story.append(Paragraph(_e(p_clean), para_s))
 
     doc.build(story)
     return buf.getvalue()
@@ -673,5 +675,13 @@ def _build_cover_letter(text: str, company_name: str = "") -> bytes:
 # UTILITIES
 # =============================================================================
 
+def _e(text: str) -> str:
+    """Escape XML special characters (&, <, >) for ReportLab Paragraph HTML parser.
+    All user-supplied strings must pass through this before being passed to Paragraph().
+    Canvas drawString calls do NOT need escaping — they render raw text."""
+    return _xml_escape(str(text or ''))
+
+
 def _safe(data: Dict, key: str, default: str = '') -> str:
-    return str(data.get(key) or default)
+    """Extract a string value from data dict and XML-escape it for Paragraph use."""
+    return _e(data.get(key) or default)

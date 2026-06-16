@@ -21,6 +21,9 @@ backend/generated/
 # ================================
 .env
 backend/.env
+frontend-app/.env
+frontend-app/.env.local
+frontend-app/.env.*.local
 
 # ================================
 # Logs
