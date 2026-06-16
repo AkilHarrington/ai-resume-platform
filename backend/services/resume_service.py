@@ -158,11 +158,13 @@ def _build_optimizer_user_message(
     job_description: str,
     missing_keywords: list[str],
     original_score: int = 0,
+    keyword_signal: str = "",
 ) -> str:
     keywords_list = ", ".join(f'"{k}"' for k in missing_keywords) if missing_keywords else "none identified"
+    signal_block = f"\n{keyword_signal}" if keyword_signal else ""
     return f"""Missing keywords from this job description: {keywords_list}
 
-Current ATS score: {original_score}
+Current ATS score: {original_score}{signal_block}
 
 <resume>
 {resume_text}
@@ -355,9 +357,24 @@ def stream_resume_optimization(
     re-processing the ~1,200-token instruction block on warm cache hits —
     cutting time-to-first-token by up to 85% after the first call.
     Dynamic max_tokens avoids 8192 over-allocation for typical resume lengths.
+
+    Keyword intelligence: a pure-code algorithmic layer queries scan_results
+    for historical keyword patterns in this job category and injects grounded
+    signals into the user message (NOT the system prompt, preserving cache).
+    Falls back silently to no injection if insufficient data or query fails.
     """
+    # Pure-code keyword intelligence — no AI, no network cost beyond one Supabase read
+    from services.keyword_intelligence_service import (
+        extract_job_category,
+        get_role_keywords,
+        build_keyword_signal_block,
+    )
+    job_category = extract_job_category(job_description)
+    role_keywords = get_role_keywords(job_category)
+    keyword_signal = build_keyword_signal_block(role_keywords, job_category)
+
     user_message = _build_optimizer_user_message(
-        resume_text, job_description, missing_keywords, original_score
+        resume_text, job_description, missing_keywords, original_score, keyword_signal
     )
     max_tokens = _calc_max_tokens(resume_text)
     client = _get_client()

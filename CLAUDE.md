@@ -107,6 +107,22 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
 - LinkedIn import
 - International CV format support (UK/EU conventions)
 
+### Platform Self-Learning (post-launch, ~200 users)
+Industry standard in 2026 for Claude-backed SaaS is **retrieval-augmented prompting** (dynamic few-shot from own database) — NOT fine-tuning (Anthropic doesn't offer it for Sonnet/Haiku).
+
+**Three things to build in order of impact:**
+
+1. **Dynamic few-shot injection** (highest value) — When a user submits for optimization, query `scan_results` for the 1–2 previous jobs with the highest `score_improvement` in a similar role/industry, prepend as examples in the optimizer prompt. Claude sees real before/after pairs from our own users. Prerequisite: 200+ completed optimizations in DB; below that threshold, examples can *hurt* (documented "few-shot collapse" phenomenon). Implementation: ~1 Supabase query + ~20 lines in `resume_service.py`.
+
+2. **Role/industry keyword intelligence** — Aggregate `missing_keywords` across scans grouped by job title. Build a dynamic "users who included X, Y, Z scored 15 points higher for PM roles" dataset injected into optimizer prompt. Data already exists in `scan_results`.
+
+3. **Prompt A/B testing** — Log prompt version per result, track mean score improvement per variant, run experiments. Tools: Statsig or Arize.
+
+**Action required at 200 users:**
+- Add `high_performer boolean` column to `scan_results` (score_improvement ≥ 15)
+- Build retrieval query in `resume_service.py`
+- A/B test with vs. without injected examples
+
 ## Dev Commands
 ```bash
 # Backend (from ai-resume-platform/backend/)

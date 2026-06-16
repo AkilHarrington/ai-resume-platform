@@ -353,6 +353,7 @@ def resume_scan(request: Request, data: ResumeScanRequest, user: dict = Depends(
     missing = ats.get("missing_keywords", [])
     score = ats.get("ats_score", 0)
 
+    from services.keyword_intelligence_service import extract_job_category
     log_scan_result(
         user_id=user["id"],
         scan_type="scan",
@@ -361,6 +362,7 @@ def resume_scan(request: Request, data: ResumeScanRequest, user: dict = Depends(
         missing_keywords=missing,
         matched_keywords=matched,
         semantic=ats.get("semantic", False),
+        job_category=extract_job_category(job_description),
     )
 
     return {
@@ -475,6 +477,7 @@ async def resume_optimize_stream(request: Request, data: ResumeOptimizeRequest, 
 
             show_guidance = improved_score <= original_score
 
+            from services.keyword_intelligence_service import extract_job_category
             log_scan_result(
                 user_id=user["id"],
                 scan_type="optimize",
@@ -483,6 +486,7 @@ async def resume_optimize_stream(request: Request, data: ResumeOptimizeRequest, 
                 missing_keywords=missing_keywords,
                 matched_keywords=improved_ats.get("matched_keywords", []),
                 semantic=True,
+                job_category=extract_job_category(job_description),
             )
 
             # ── Step 5: final result event ────────────────────────────────────
