@@ -26,7 +26,7 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
 | **JD** | Job description (pasted by user for ATS scan) |
 | **semantic scan** | ATS scan using Claude — requires API credits |
 
-## Current State (after session 11 — dark mode + PDF backend complete)
+## Current State (after session 16 — production deployment + all critical bugs fixed)
 
 ### ✅ Done
 - Claude semantic ATS scorer — 6 dimensions (Human Readability 5%, Keyword Alignment 30%)
@@ -81,6 +81,20 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
   - All pages updated: LandingPage, WorkspacePage, LoginPage, SignupPage, PricingPage, PrivacyPage, TermsPage, all workspace tabs
   - TypeScript clean (0 errors) after full migration
 
+- **Production deployment (session 16) — fully live on Render + Vercel**:
+  - **Backend**: Render (auto-deploy from `main` branch) — `https://ai-resume-platform.onrender.com` (or similar)
+  - **Frontend**: Vercel — `https://ai-resume-platform-hazel.vercel.app`
+  - **PostgREST 401 fix**: Removed hand-rolled HS256 JWT in `supabase_service.py`; now uses real `sb_secret_*` key on `apikey` header only (Supabase gateway translates internally). Added user-JWT + anon-key path for pro-status reads (most reliable path)
+  - **CORS fix**: `allow_origin_regex=r"https://ai-resume-platform[a-zA-Z0-9\-]*\.vercel\.app"` in CORSMiddleware — covers all Vercel preview URLs
+  - **CoverLetterTab env var fix**: `VITE_API_BASE_URL` → `VITE_API_URL` (was silently falling back to localhost in production for PDF download)
+  - **Stripe webhook fix**: Production `STRIPE_WEBHOOK_SECRET` on Render was the local CLI test secret — updated to production signing secret from Stripe dashboard; all events now 200 OK
+  - **Email confirmation URL**: Supabase Site URL set to `https://ai-resume-platform-hazel.vercel.app` (was localhost)
+  - **Supabase key format**: New format uses `sb_publishable_*` (anon) and `sb_secret_*` (service role) — not JWTs
+  - **Render env vars set**: `ENVIRONMENT=production`, `FRONTEND_URL`, `SUPABASE_ANON_KEY`, `ALLOWED_ORIGINS`, `STRIPE_WEBHOOK_SECRET` (production)
+  - **Vercel env vars set**: `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_STRIPE_PUBLISHABLE_KEY`
+  - **Supabase RLS + grants fix (session 17)**: Legacy JWT keys were disabled by Supabase on 2026-06-15. Switched to new `sb_publishable_*` (anon) + user JWT path for all reads. Fixed missing table-level grants — ran SQL to `GRANT SELECT, INSERT, UPDATE ON public.profiles TO authenticated, anon` and `GRANT ALL TO service_role`. Recreated RLS policies: users can SELECT/UPDATE their own row (`auth.uid() = id`); service_role has unrestricted access. Pro-status 503s fully resolved.
+  - **Pro-status error logging**: `logger.error` now logs full exception message (not just type name) for easier future debugging.
+
 - **Guided 5-step workspace redesign (session 12)**:
   - `DashboardTab.tsx` — deprecated (no longer imported); replaced by `SetupStep` inline in WorkspacePage
   - `WorkspacePage.tsx` fully rewritten: 5-step indicator bar (dots + lines, green when done) + minimal nav row (logo, PRO badge, email, theme, sign out) + `SetupStep` for step 1 (resume upload zone + JD textarea + optional company/targetRole) + contextual `NextBanner` at bottom (always tells user exactly what to do next)
@@ -90,10 +104,10 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
   - 0 TypeScript errors
 
 ### 🔲 Next session
-1. **Add Anthropic API credits** (blocker — nothing AI works without this)
-2. **Test end-to-end** with Danielle's resume + JD (scan → optimize → cover letter → linkedin → PDF download)
-3. **Set FORCE_PRO=false** and test real Stripe → webhook → Supabase → pro unlock flow
-4. **Deploy** — backend to Render, frontend to Vercel
+1. **Message 20 personal contacts** — offer free resume scans (first users / beta feedback) — platform is fully live
+2. **Incorporate via Stripe Atlas** + set up Wise Business
+3. **WiPay integration** + launch to Caribbean diaspora
+4. **Book meeting** with Caribbean recruitment agency
 
 ### Deferred (explicit)
 - API versioning (/api/v1 prefix) — add after deploy, not before
@@ -163,5 +177,5 @@ stripe listen --forward-to localhost:8000/api/payments/webhook
 | `frontend-app/src/pages/TermsPage.tsx` | /terms route |
 
 ## Project Rating
-**Current: 8.5/10** — dark mode, privacy/ToS, backend PDF, all code review issues done. Production-ready architecture.
-Gap to 10: Anthropic credits + end-to-end test (blocker), deployment to Render/Vercel, post-launch API versioning + Zod validation.
+**Current: 9.5/10** — fully deployed and working end-to-end. Auth, pro-status, Stripe checkout + webhook, PDF downloads, all AI features confirmed live. Supabase RLS + grants fixed. Zero known production bugs.
+Gap to 10: post-launch API versioning + Zod validation (deferred by design).

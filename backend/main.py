@@ -42,6 +42,8 @@ from services.supabase_service import (
     log_scan_result,
     verify_token,
     get_user_pro_status,
+    is_stripe_event_processed,
+    mark_stripe_event_processed,
 )
 from services.exceptions import AIUnavailableError
 
@@ -151,6 +153,24 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+
+# =========================================================
+# HTTPS redirect middleware (production only)
+# Checks X-Forwarded-Proto so it works behind Render/Vercel TLS termination.
+# Standard HTTPSRedirectMiddleware doesn't work on cloud platforms because
+# internal requests arrive as HTTP even when the user hit HTTPS.
+# =========================================================
+
+@app.middleware("http")
+async def https_redirect(request: Request, call_next):
+    if ENVIRONMENT == "production":
+        proto = request.headers.get("x-forwarded-proto", "https")
+        if proto == "http":
+            url = str(request.url).replace("http://", "https://", 1)
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=url, status_code=301)
+    return await call_next(request)
 
 
 # =========================================================
@@ -738,6 +758,12 @@ async def stripe_webhook(request: Request):
         logger.error("Stripe webhook parse error: %s", type(e).__name__)
         raise HTTPException(status_code=400, detail="Webhook processing failed.")
 
+    # ── Idempotency: skip events we've already processed ─────────────────────
+    event_id = event.get("id", "")
+    if event_id and is_stripe_event_processed(event_id):
+        logger.info("Stripe event %s already processed — skipping duplicate.", event_id)
+        return {"received": True}
+
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         customer_email = session.get("customer_details", {}).get("email", "")
@@ -784,4 +810,35 @@ async def stripe_webhook(request: Request):
                 # Still return 200 so Stripe doesn't retry infinitely,
                 # but the error is now visible in logs for manual remediation.
 
+    # Mark event as processed after handling (idempotency guard)
+    if event_id:
+        mark_stripe_event_processed(event_id, event["type"])
+
     return {"received": True}
+
+
+# =========================================================
+# API v1 versioned routes — same handlers, /api/v1/ prefix
+# Existing /api/ routes remain for backward compatibility.
+# Frontend should use /api/v1/ going forward.
+# NOTE: After deploying, update the Stripe webhook URL in the
+#       Stripe Dashboard to .../api/v1/payments/webhook
+# =========================================================
+
+_v1_routes = [
+    ("/resume/upload",                    resume_upload,              ["POST"]),
+    ("/resume/scan",                      resume_scan,                ["POST"]),
+    ("/resume/optimize/stream",           resume_optimize_stream,     ["POST"]),
+    ("/cover-letter/generate",            cover_letter_generate,      ["POST"]),
+    ("/cover-letter/stream",              cover_letter_stream,        ["POST"]),
+    ("/linkedin/optimize",                linkedin_optimize,          ["POST"]),
+    ("/linkedin/stream",                  linkedin_stream,            ["POST"]),
+    ("/resume/download-pdf",              resume_download_pdf,        ["POST"]),
+    ("/cover-letter/download-pdf",        cover_letter_download_pdf,  ["POST"]),
+    ("/payments/create-checkout-session", create_checkout_session,    ["POST"]),
+    ("/user/pro-status",                  pro_status,                 ["GET"]),
+    ("/payments/webhook",                 stripe_webhook,             ["POST"]),
+]
+
+for _path, _handler, _methods in _v1_routes:
+    app.add_api_route(f"/api/v1{_path}", _handler, methods=_methods)

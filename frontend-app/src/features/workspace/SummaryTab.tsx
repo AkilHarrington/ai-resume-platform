@@ -58,7 +58,7 @@ export function SummaryTab({
     try {
       const token = session?.access_token
       if (!token) throw new Error('Not authenticated')
-      const resp = await fetch(`${API_BASE}/api/resume/download-pdf`, {
+      const resp = await fetch(`${API_BASE}/api/v1/resume/download-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ resumeText: optimizeResult.optimizedResumeText, template: 'professional' }),
@@ -88,7 +88,7 @@ export function SummaryTab({
     try {
       const token = session?.access_token
       if (!token) throw new Error('Not authenticated')
-      const resp = await fetch(`${API_BASE}/api/cover-letter/download-pdf`, {
+      const resp = await fetch(`${API_BASE}/api/v1/cover-letter/download-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ coverLetterText: coverLetter, companyName: companyName || '' }),

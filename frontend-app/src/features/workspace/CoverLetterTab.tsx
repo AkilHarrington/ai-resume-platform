@@ -26,7 +26,7 @@ export function CoverLetterTab({ result, isLoading, isStreaming, hasResume, comp
     try {
       const token = session?.access_token
       if (!token) throw new Error('Not authenticated')
-      const resp = await fetch(`${API_BASE}/api/cover-letter/download-pdf`, {
+      const resp = await fetch(`${API_BASE}/api/v1/cover-letter/download-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ coverLetterText: result, companyName: companyName || '' }),

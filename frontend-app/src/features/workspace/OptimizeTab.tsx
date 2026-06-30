@@ -345,7 +345,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
     try {
       const token = session?.access_token
       if (!token) throw new Error('Not authenticated')
-      const resp = await fetch(`${API_BASE}/api/resume/download-pdf`, {
+      const resp = await fetch(`${API_BASE}/api/v1/resume/download-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ resumeText: result.optimizedResumeText, template: selectedTemplate, palette: selectedPalette }),

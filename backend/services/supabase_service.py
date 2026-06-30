@@ -228,6 +228,42 @@ def log_scan_result(
         logger.warning("log_scan_result failed (non-blocking): %s", type(e).__name__)
 
 
+# =========================================================
+# Stripe webhook idempotency — prevent duplicate event processing
+# =========================================================
+
+def is_stripe_event_processed(event_id: str) -> bool:
+    """Return True if this Stripe event ID has already been processed.
+    Fails open (returns False) on error — better to process twice than miss a payment."""
+    try:
+        resp = httpx.get(
+            _db_url("stripe_events"),
+            headers=_db_headers(),
+            params={"select": "event_id", "event_id": f"eq.{event_id}"},
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            return len(resp.json()) > 0
+        logger.warning("is_stripe_event_processed: unexpected status %s", resp.status_code)
+        return False  # fail open
+    except Exception as e:
+        logger.warning("is_stripe_event_processed failed (fail open): %s", type(e).__name__)
+        return False  # fail open
+
+
+def mark_stripe_event_processed(event_id: str, event_type: str) -> None:
+    """Record a Stripe event ID as processed. Fails silently — never blocks webhook response."""
+    try:
+        httpx.post(
+            _db_url("stripe_events"),
+            headers={**_db_headers(), "Prefer": "resolution=merge-duplicates"},
+            json={"event_id": event_id, "event_type": event_type},
+            timeout=5,
+        )
+    except Exception as e:
+        logger.warning("mark_stripe_event_processed failed (non-blocking): %s", type(e).__name__)
+
+
 def get_user_by_email(email: str) -> dict | None:
     """Look up a profile by email (used for webhook matching)."""
     try:

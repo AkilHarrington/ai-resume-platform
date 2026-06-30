@@ -88,7 +88,7 @@ export interface UploadResult {
 export async function uploadResume(file: File): Promise<UploadResult> {
   const form = new FormData()
   form.append('file', file)
-  const { data } = await api.post<UploadResult>('/api/resume/upload', form, {
+  const { data } = await api.post<UploadResult>('/api/v1/resume/upload', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   return data
@@ -96,7 +96,7 @@ export async function uploadResume(file: File): Promise<UploadResult> {
 
 // user_id params removed — backend now extracts user from the verified JWT
 export async function scanResume(resumeText: string, jobDescription?: string): Promise<ScanResult> {
-  const { data } = await api.post<ScanResult>('/api/resume/scan', { resumeText, jobDescription })
+  const { data } = await api.post<ScanResult>('/api/v1/resume/scan', { resumeText, jobDescription })
   return data
 }
 
@@ -117,7 +117,7 @@ export function streamOptimize(
     const { data: { session } } = await supabase.auth.getSession()
     let response: Response
     try {
-      response = await fetch(`${API_BASE_URL}/api/resume/optimize/stream`, {
+      response = await fetch(`${API_BASE_URL}/api/v1/resume/optimize/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -189,7 +189,7 @@ export async function generateCoverLetter(params: {
   companyName?: string
   candidateName?: string
 }): Promise<{ coverLetter: string }> {
-  const { data } = await api.post<{ coverLetter: string }>('/api/cover-letter/generate', params)
+  const { data } = await api.post<{ coverLetter: string }>('/api/v1/cover-letter/generate', params)
   return data
 }
 
@@ -198,7 +198,7 @@ export async function optimizeLinkedIn(params: {
   jobDescription?: string
   targetRole?: string
 }): Promise<{ headline: string; summary: string }> {
-  const { data } = await api.post<{ headline: string; summary: string }>('/api/linkedin/optimize', params)
+  const { data } = await api.post<{ headline: string; summary: string }>('/api/v1/linkedin/optimize', params)
   return data
 }
 
@@ -270,7 +270,7 @@ export function streamCoverLetter(
   onDone: () => void,
   onError: (msg: string) => void,
 ): Promise<void> {
-  return readSSEStream('/api/cover-letter/stream', params, onChunk, onDone, onError)
+  return readSSEStream('/api/v1/cover-letter/stream', params, onChunk, onDone, onError)
 }
 
 export function streamLinkedIn(
@@ -279,15 +279,15 @@ export function streamLinkedIn(
   onDone: () => void,
   onError: (msg: string) => void,
 ): Promise<void> {
-  return readSSEStream('/api/linkedin/stream', params, onChunk, onDone, onError)
+  return readSSEStream('/api/v1/linkedin/stream', params, onChunk, onDone, onError)
 }
 
 export async function createCheckoutSession(plan: 'monthly' | 'onetime'): Promise<{ url: string }> {
-  const { data } = await api.post<{ url: string }>(`/api/payments/create-checkout-session?plan=${plan}`)
+  const { data } = await api.post<{ url: string }>(`/api/v1/payments/create-checkout-session?plan=${plan}`)
   return data
 }
 
 export async function getProStatus(): Promise<{ isPro: boolean }> {
-  const { data } = await api.get<{ isPro: boolean }>('/api/user/pro-status')
+  const { data } = await api.get<{ isPro: boolean }>('/api/v1/user/pro-status')
   return data
 }
