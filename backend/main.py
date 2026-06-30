@@ -693,6 +693,7 @@ def create_checkout_session(request: Request, plan: str = "monthly", user: dict 
             success_url=f"{FRONTEND_URL}/workspace?upgrade=success",
             cancel_url=f"{FRONTEND_URL}/pricing",
             customer_email=user.get("email"),
+            metadata={"user_id": user.get("id", "")},
         )
         return {"url": session.url}
     except stripe.StripeError as e:
@@ -737,8 +738,18 @@ async def stripe_webhook(request: Request):
         customer_email = session.get("customer_details", {}).get("email", "")
         customer_id = session.get("customer", "")
         subscription_id = session.get("subscription", "") or ""
+        # Prefer user_id from metadata (set at checkout creation) — avoids email column dependency
+        user_id = session.get("metadata", {}).get("user_id", "")
 
-        if customer_email:
+        if user_id:
+            set_user_pro(
+                user_id=user_id,
+                stripe_customer_id=customer_id,
+                stripe_subscription_id=subscription_id,
+            )
+            logger.info("Pro access granted for user_id=%s", user_id)
+        elif customer_email:
+            # Fallback: look up by email (requires email column in profiles)
             user = get_user_by_email(customer_email)
             if user:
                 set_user_pro(
@@ -746,9 +757,11 @@ async def stripe_webhook(request: Request):
                     stripe_customer_id=customer_id,
                     stripe_subscription_id=subscription_id,
                 )
-                logger.info("Pro access granted for %s", customer_email)
+                logger.info("Pro access granted for %s (email fallback)", customer_email)
             else:
                 logger.warning("checkout.session.completed: no profile found for %s", customer_email)
+        else:
+            logger.warning("checkout.session.completed: no user_id or email to identify user")
 
     elif event["type"] == "customer.subscription.deleted":
         subscription = event["data"]["object"]
