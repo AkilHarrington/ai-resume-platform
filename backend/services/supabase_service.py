@@ -1,27 +1,27 @@
 # =========================================================
 # File: services/supabase_service.py
 # Purpose:
-# Supabase client + helpers for user pro status.
+# JWT verification + direct PostgREST calls to Supabase.
+# Uses httpx for all DB operations — no Supabase Python SDK,
+# no Pydantic V1 dependency, works on any Python version.
 # =========================================================
 
 import logging
 import os
+import httpx
 import jwt as pyjwt
 from jwt import PyJWKClient
-from supabase import create_client, Client
 
 logger = logging.getLogger("ai_resume_studio.supabase")
 
-# Clear proxy env vars that cause httpx (used by the Supabase client) to try routing
-# through a SOCKS proxy that isn't available in the local dev environment.
+# Clear proxy env vars that cause httpx to try routing through unavailable SOCKS proxies.
 for _proxy_var in ("ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"):
     os.environ.pop(_proxy_var, None)
 
 # =========================================================
-# Singleton client — instantiated once, reused across requests
+# JWKS client for RS256 JWT verification
 # =========================================================
 
-_client: Client | None = None
 _jwks_client: PyJWKClient | None = None
 
 
@@ -34,24 +34,31 @@ def _get_jwks_client() -> PyJWKClient:
     return _jwks_client
 
 
-def _get_client() -> Client:
-    global _client
-    if _client is None:
-        url = os.getenv("SUPABASE_URL", "")
-        key = os.getenv("SUPABASE_SERVICE_KEY", "")
-        if not url or not key:
-            raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set.")
-        _client = create_client(url, key)
-    return _client
+# =========================================================
+# Direct PostgREST helpers — no Supabase SDK, no Pydantic
+# =========================================================
 
+def _db_headers() -> dict:
+    key = os.getenv("SUPABASE_SERVICE_KEY", "")
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+
+
+def _db_url(table: str) -> str:
+    return f"{os.getenv('SUPABASE_URL', '')}/rest/v1/{table}"
+
+
+# =========================================================
+# JWT verification
+# =========================================================
 
 def verify_token(token: str) -> dict | None:
     """
     Verify a Supabase JWT locally — supports both HS256 (legacy secret) and RS256 (JWKS).
-
-    Supabase projects created before mid-2024 use HS256; newer projects use RS256.
-    We check the token's 'alg' header and route to the right verifier automatically.
-    No network call to Supabase auth API — pure local crypto (RS256 fetches JWKS once on startup).
+    No network call to Supabase auth API — pure local crypto.
     """
     try:
         header = pyjwt.get_unverified_header(token)
@@ -69,7 +76,6 @@ def verify_token(token: str) -> dict | None:
                 options={"verify_aud": False},
             )
         else:
-            # RS256 / ES256 — verify using Supabase's published public keys
             signing_key = _get_jwks_client().get_signing_key_from_jwt(token)
             decoded = pyjwt.decode(
                 token,
@@ -96,51 +102,67 @@ def verify_token(token: str) -> dict | None:
         return None
 
 
+# =========================================================
+# Database operations — direct httpx to PostgREST
+# =========================================================
+
 def get_user_pro_status(user_id: str) -> bool:
     """
     Return True if the user has an active Pro subscription.
-
-    Returns False if no profile row exists yet (new user whose trigger hasn't fired).
-    Raises on genuine infrastructure failures so callers can return 503 and avoid
-    silently demoting paying users during Supabase outages.
+    Returns False if no profile row exists yet.
+    Raises on genuine infrastructure failures (non-2xx, non-empty response).
     """
-    client = _get_client()
     try:
-        result = client.table("profiles").select("is_pro").eq("id", user_id).single().execute()
-        return bool(result.data.get("is_pro", False))
-    except Exception as e:
-        # Supabase raises PostgREST error PGRST116 when .single() finds 0 rows.
-        # Treat this as "no profile yet" → free tier, not an infrastructure failure.
-        err_str = str(e).lower()
-        if "pgrst116" in err_str or "no rows" in err_str:
-            logger.info("get_user_pro_status: no profile row for %s — treating as free.", user_id)
-            return False
-        # Anything else is a real infrastructure failure — re-raise for 503 handling.
-        raise
+        resp = httpx.get(
+            _db_url("profiles"),
+            headers=_db_headers(),
+            params={"select": "is_pro", "id": f"eq.{user_id}"},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if not data:
+                logger.info("get_user_pro_status: no profile row for %s — treating as free.", user_id)
+                return False
+            return bool(data[0].get("is_pro", False))
+        raise RuntimeError(f"Supabase DB returned {resp.status_code}: {resp.text[:200]}")
+    except httpx.TimeoutException:
+        raise RuntimeError("Supabase DB timeout")
 
 
 def set_user_pro(user_id: str, stripe_customer_id: str = "", stripe_subscription_id: str = "") -> None:
     """Flip is_pro=true for a user after successful Stripe payment."""
-    client = _get_client()
-    client.table("profiles").upsert({
-        "id": user_id,
-        "is_pro": True,
-        "stripe_customer_id": stripe_customer_id,
-        "stripe_subscription_id": stripe_subscription_id,
-    }).execute()
+    resp = httpx.post(
+        _db_url("profiles"),
+        headers={**_db_headers(), "Prefer": "resolution=merge-duplicates"},
+        json={
+            "id": user_id,
+            "is_pro": True,
+            "stripe_customer_id": stripe_customer_id,
+            "stripe_subscription_id": stripe_subscription_id,
+        },
+        timeout=10,
+    )
+    if resp.status_code not in (200, 201):
+        logger.error("set_user_pro failed for %s: %s %s", user_id, resp.status_code, resp.text[:200])
 
 
 def revoke_user_pro(stripe_customer_id: str) -> None:
     """Flip is_pro=false when a Stripe subscription is cancelled."""
-    client = _get_client()
-    client.table("profiles").update({"is_pro": False}).eq(
-        "stripe_customer_id", stripe_customer_id
-    ).execute()
+    resp = httpx.patch(
+        _db_url("profiles"),
+        headers=_db_headers(),
+        params={"stripe_customer_id": f"eq.{stripe_customer_id}"},
+        json={"is_pro": False},
+        timeout=10,
+    )
+    if resp.status_code not in (200, 204):
+        logger.error("revoke_user_pro failed for customer %s: %s", stripe_customer_id, resp.status_code)
 
 
 def log_scan_result(
     user_id: str | None,
-    scan_type: str,  # 'scan' or 'optimize'
+    scan_type: str,
     before_score: int,
     after_score: int,
     missing_keywords: list[str],
@@ -150,20 +172,24 @@ def log_scan_result(
 ) -> None:
     """Log a scan or optimize result for analytics. Fails silently — never blocks the user."""
     try:
-        client = _get_client()
-        client.table("scan_results").insert({
-            "user_id": user_id or None,
-            "scan_type": scan_type,
-            "job_category": job_category or None,
-            "before_score": before_score,
-            "after_score": after_score,
-            "score_improvement": after_score - before_score,
-            "missing_keywords": missing_keywords,
-            "matched_keywords": matched_keywords,
-            "keyword_count_missing": len(missing_keywords),
-            "keyword_count_matched": len(matched_keywords),
-            "semantic": semantic,
-        }).execute()
+        httpx.post(
+            _db_url("scan_results"),
+            headers=_db_headers(),
+            json={
+                "user_id": user_id or None,
+                "scan_type": scan_type,
+                "job_category": job_category or None,
+                "before_score": before_score,
+                "after_score": after_score,
+                "score_improvement": after_score - before_score,
+                "missing_keywords": missing_keywords,
+                "matched_keywords": matched_keywords,
+                "keyword_count_missing": len(missing_keywords),
+                "keyword_count_matched": len(matched_keywords),
+                "semantic": semantic,
+            },
+            timeout=10,
+        )
     except Exception as e:
         logger.warning("log_scan_result failed (non-blocking): %s", type(e).__name__)
 
@@ -171,9 +197,16 @@ def log_scan_result(
 def get_user_by_email(email: str) -> dict | None:
     """Look up a profile by email (used for webhook matching)."""
     try:
-        client = _get_client()
-        result = client.table("profiles").select("id, email, is_pro").eq("email", email).single().execute()
-        return result.data
+        resp = httpx.get(
+            _db_url("profiles"),
+            headers=_db_headers(),
+            params={"select": "id,email,is_pro", "email": f"eq.{email}"},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            return data[0] if data else None
+        return None
     except Exception as e:
-        logger.warning("get_user_by_email failed for lookup: %s", type(e).__name__)
+        logger.warning("get_user_by_email failed: %s", type(e).__name__)
         return None
