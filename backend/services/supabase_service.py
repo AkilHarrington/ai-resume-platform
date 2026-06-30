@@ -118,16 +118,38 @@ def verify_token(token: str) -> dict | None:
 # Database operations — direct httpx to PostgREST
 # =========================================================
 
-def get_user_pro_status(user_id: str) -> bool:
+def get_user_pro_status(user_id: str, user_jwt: str | None = None) -> bool:
     """
     Return True if the user has an active Pro subscription.
     Returns False if no profile row exists yet.
     Raises on genuine infrastructure failures (non-2xx, non-empty response).
+
+    When user_jwt is provided, uses the anon (publishable) key + user's own JWT.
+    This bypasses the sb_secret_* → gateway → JWT translation chain and uses
+    PostgREST's standard RLS auth path — the most reliable approach.
+
+    Falls back to service key (apikey only) when no user JWT is available.
     """
     try:
+        if user_jwt:
+            # Preferred path: anon key + user JWT. PostgREST verifies the JWT
+            # via JWKS just like any user request, no gateway translation needed.
+            anon_key = os.getenv("SUPABASE_ANON_KEY", "")
+            if not anon_key:
+                # Anon key not set — fall through to service key path below
+                headers = _db_headers()
+            else:
+                headers = {
+                    "apikey": anon_key,
+                    "Authorization": f"Bearer {user_jwt}",
+                    "Content-Type": "application/json",
+                }
+        else:
+            headers = _db_headers()
+
         resp = httpx.get(
             _db_url("profiles"),
-            headers=_db_headers(),
+            headers=headers,
             params={"select": "is_pro", "id": f"eq.{user_id}"},
             timeout=10,
         )
