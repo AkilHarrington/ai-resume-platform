@@ -145,6 +145,8 @@ if not allowed_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    # Match all Vercel preview URLs for this project (hash changes per deploy)
+    allow_origin_regex=r"https://ai-resume-platform[a-zA-Z0-9\-]*\.vercel\.app",
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
