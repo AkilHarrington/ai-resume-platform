@@ -20,10 +20,6 @@ from reportlab.platypus import (
 )
 
 # ─── Colors ──────────────────────────────────────────────────────────────────
-NAVY        = HexColor('#1A365D')
-NAVY_DARK   = HexColor('#0F2647')
-EMERALD     = HexColor('#047857')
-EMERALD_LT  = HexColor('#10B981')
 CHARCOAL    = HexColor('#2D2D2D')
 GRAY_500    = HexColor('#6B7280')
 GRAY_200    = HexColor('#E5E7EB')
@@ -33,12 +29,51 @@ WHITE       = white
 
 PAGE_W, PAGE_H = LETTER  # 612 x 792 pt
 
+# ─── Palette registry ─────────────────────────────────────────────────────────
+# Each palette defines: accent (primary), accent_dark, accent_light, success_dot
+PALETTES: Dict[str, Dict[str, Any]] = {
+    "blue": {
+        "accent":       HexColor('#1A365D'),
+        "accent_dark":  HexColor('#0F2647'),
+        "accent_light": HexColor('#EBF2FF'),
+        "dot":          HexColor('#047857'),
+    },
+    "charcoal": {
+        "accent":       HexColor('#1F2937'),
+        "accent_dark":  HexColor('#111827'),
+        "accent_light": HexColor('#F3F4F6'),
+        "dot":          HexColor('#374151'),
+    },
+    "monochrome": {
+        "accent":       HexColor('#000000'),
+        "accent_dark":  HexColor('#000000'),
+        "accent_light": HexColor('#F9FAFB'),
+        "dot":          HexColor('#4B5563'),
+    },
+    "slate": {
+        "accent":       HexColor('#334155'),
+        "accent_dark":  HexColor('#1E293B'),
+        "accent_light": HexColor('#F1F5F9'),
+        "dot":          HexColor('#475569'),
+    },
+    "forest": {
+        "accent":       HexColor('#14532D'),
+        "accent_dark":  HexColor('#052E16'),
+        "accent_light": HexColor('#F0FDF4'),
+        "dot":          HexColor('#166534'),
+    },
+}
+
+def _get_palette(palette: str) -> Dict[str, Any]:
+    """Return palette dict, defaulting to 'blue' if unknown."""
+    return PALETTES.get(palette.lower().strip(), PALETTES["blue"])
+
 
 # =============================================================================
 # PUBLIC ENTRY POINTS
 # =============================================================================
 
-def generate_resume_pdf(resume_data: Dict, template: str = "professional") -> bytes:
+def generate_resume_pdf(resume_data: Dict, template: str = "professional", palette: str = "blue") -> bytes:
     """
     Generate a resume PDF using ReportLab.
 
@@ -50,12 +85,13 @@ def generate_resume_pdf(resume_data: Dict, template: str = "professional") -> by
         PDF bytes
     """
     tpl = template.lower().strip()
+    pal = _get_palette(palette)
     if tpl == "modern":
-        return _build_modern(resume_data)
+        return _build_modern(resume_data, pal)
     elif tpl == "executive":
-        return _build_executive(resume_data)
+        return _build_executive(resume_data, pal)
     else:
-        return _build_professional(resume_data)
+        return _build_professional(resume_data, pal)
 
 
 def generate_cover_letter_pdf(cover_letter_text: str, company_name: str = "") -> bytes:
@@ -75,8 +111,8 @@ _PROF_BM = 0.50 * inch
 _PROF_CW = PAGE_W - _PROF_LM - _PROF_RM   # 7.2"
 
 
-def _prof_banner(title: str) -> Table:
-    """Full-width navy section header for Professional template."""
+def _prof_banner(title: str, pal: Dict) -> Table:
+    """Full-width accent section header for Professional template."""
     style = ParagraphStyle(
         'ProfBanner',
         fontName='Helvetica-Bold', fontSize=7.5,
@@ -84,7 +120,7 @@ def _prof_banner(title: str) -> Table:
     )
     t = Table([[Paragraph(title.upper(), style)]], colWidths=[_PROF_CW])
     t.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), NAVY),
+        ('BACKGROUND', (0, 0), (-1, -1), pal["accent"]),
         ('LEFTPADDING',   (0, 0), (-1, -1), 6),
         ('RIGHTPADDING',  (0, 0), (-1, -1), 6),
         ('TOPPADDING',    (0, 0), (-1, -1), 4),
@@ -93,13 +129,13 @@ def _prof_banner(title: str) -> Table:
     return t
 
 
-def _prof_section(story: List, title: str) -> None:
+def _prof_section(story: List, title: str, pal: Dict) -> None:
     story.append(Spacer(1, 9))
-    story.append(_prof_banner(title))
+    story.append(_prof_banner(title, pal))
     story.append(Spacer(1, 6))
 
 
-def _build_professional(data: Dict) -> bytes:
+def _build_professional(data: Dict, pal: Dict) -> bytes:
     buf = BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=LETTER,
@@ -110,7 +146,7 @@ def _build_professional(data: Dict) -> bytes:
     # ── Styles ────────────────────────────────────────────────────────────────
     name_s = ParagraphStyle(
         'PName', fontName='Helvetica-Bold', fontSize=22,
-        textColor=NAVY, leading=26, spaceAfter=3,
+        textColor=pal["accent"], leading=26, spaceAfter=3,
     )
     hl_s = ParagraphStyle(
         'PHL', fontName='Helvetica', fontSize=11,
@@ -122,7 +158,7 @@ def _build_professional(data: Dict) -> bytes:
     )
     title_s = ParagraphStyle(
         'PJobTitle', fontName='Helvetica-Bold', fontSize=10,
-        textColor=NAVY, leading=13,
+        textColor=pal["accent"], leading=13,
     )
     dates_s = ParagraphStyle(
         'PDates', fontName='Helvetica', fontSize=8.5,
@@ -130,7 +166,7 @@ def _build_professional(data: Dict) -> bytes:
     )
     company_s = ParagraphStyle(
         'PCo', fontName='Helvetica', fontSize=9.5,
-        textColor=EMERALD, leading=12, spaceAfter=2,
+        textColor=pal["dot"], leading=12, spaceAfter=2,
     )
     bullet_s = ParagraphStyle(
         'PBul', fontName='Helvetica', fontSize=9,
@@ -148,7 +184,7 @@ def _build_professional(data: Dict) -> bytes:
     )
     edu_inst_s = ParagraphStyle(
         'PEduInst', fontName='Helvetica-Bold', fontSize=10,
-        textColor=NAVY, leading=13, spaceAfter=1,
+        textColor=pal["accent"], leading=13, spaceAfter=1,
     )
     edu_deg_s = ParagraphStyle(
         'PEduDeg', fontName='Helvetica', fontSize=9.5,
@@ -174,17 +210,17 @@ def _build_professional(data: Dict) -> bytes:
     if parts:
         story.append(Paragraph('   |   '.join(_e(p) for p in parts), contact_s))
 
-    # Emerald rule
-    story.append(HRFlowable(width='100%', thickness=1.5, color=EMERALD, spaceAfter=4, spaceBefore=2))
+    # Accent rule
+    story.append(HRFlowable(width='100%', thickness=1.5, color=pal["dot"], spaceAfter=4, spaceBefore=2))
 
     # Summary
     if data.get('summary'):
-        _prof_section(story, 'Professional Summary')
+        _prof_section(story, 'Professional Summary', pal)
         story.append(Paragraph(_e(data['summary']), body_s))
 
     # Experience
     if data.get('experience'):
-        _prof_section(story, 'Professional Experience')
+        _prof_section(story, 'Professional Experience', pal)
         for job in data['experience']:
             title_txt = _e(job.get('title', ''))
             company_txt = _e(job.get('company', ''))
@@ -216,13 +252,13 @@ def _build_professional(data: Dict) -> bytes:
 
     # Skills
     if data.get('skills'):
-        _prof_section(story, 'Skills')
+        _prof_section(story, 'Skills', pal)
         skills_text = '   •   '.join(_e(s) for s in data['skills'])
         story.append(Paragraph(skills_text, skill_s))
 
     # Education
     if data.get('education'):
-        _prof_section(story, 'Education')
+        _prof_section(story, 'Education', pal)
         for edu in data['education']:
             story.append(Paragraph(_e(edu.get('institution', '')), edu_inst_s))
             if edu.get('degree'):
@@ -230,7 +266,7 @@ def _build_professional(data: Dict) -> bytes:
 
     # Certifications
     if data.get('certifications'):
-        _prof_section(story, 'Certifications')
+        _prof_section(story, 'Certifications', pal)
         for cert in data['certifications']:
             story.append(Paragraph(_e(cert.get('name', '')), cert_s))
 
@@ -257,15 +293,15 @@ _MOD_MAIN_PAD_V  = 20
 _MOD_SIDE_INNER  = _MOD_SIDEBAR_W - (_MOD_SIDE_PAD_L + _MOD_SIDE_PAD_R) / 72   # usable sidebar width in inches
 
 
-def _mod_draw_bg(canvas, doc):
-    """Paint the navy sidebar background before every page."""
+def _mod_draw_bg(canvas, doc, pal: Dict):
+    """Paint the accent sidebar background before every page."""
     canvas.saveState()
-    canvas.setFillColor(NAVY_DARK)
+    canvas.setFillColor(pal["accent_dark"])
     canvas.rect(0, 0, _MOD_SIDEBAR_W, PAGE_H, fill=1, stroke=0)
     canvas.restoreState()
 
 
-def _build_modern(data: Dict) -> bytes:
+def _build_modern(data: Dict, pal: Dict) -> bytes:
     buf = BytesIO()
 
     sidebar_frame = Frame(
@@ -281,10 +317,13 @@ def _build_modern(data: Dict) -> bytes:
         id='main',
     )
 
+    def _draw_bg(canvas, doc):
+        _mod_draw_bg(canvas, doc, pal)
+
     page_template = PageTemplate(
         id='ModernPage',
         frames=[sidebar_frame, main_frame],
-        onPage=_mod_draw_bg,
+        onPage=_draw_bg,
     )
 
     doc = BaseDocTemplate(
@@ -304,7 +343,7 @@ def _build_modern(data: Dict) -> bytes:
     )
     s_sec = ParagraphStyle(
         'SSec', fontName='Helvetica-Bold', fontSize=7.5,
-        textColor=EMERALD_LT, leading=9, spaceAfter=5,
+        textColor=pal["accent_light"], leading=9, spaceAfter=5,
         spaceBefore=10,
     )
     s_contact = ParagraphStyle(
@@ -331,11 +370,11 @@ def _build_modern(data: Dict) -> bytes:
     # ── Main styles ───────────────────────────────────────────────────────────
     m_sec = ParagraphStyle(
         'MSec', fontName='Helvetica-Bold', fontSize=10,
-        textColor=NAVY, leading=12, spaceAfter=6, spaceBefore=12,
+        textColor=pal["accent"], leading=12, spaceAfter=6, spaceBefore=12,
     )
     m_job_title = ParagraphStyle(
         'MJob', fontName='Helvetica-Bold', fontSize=10.5,
-        textColor=NAVY, leading=13,
+        textColor=pal["accent"], leading=13,
     )
     m_dates = ParagraphStyle(
         'MDates', fontName='Helvetica', fontSize=8.5,
@@ -343,7 +382,7 @@ def _build_modern(data: Dict) -> bytes:
     )
     m_company = ParagraphStyle(
         'MCo', fontName='Helvetica', fontSize=9.5,
-        textColor=EMERALD, leading=12, spaceAfter=3,
+        textColor=pal["dot"], leading=12, spaceAfter=3,
     )
     m_bullet = ParagraphStyle(
         'MBul', fontName='Helvetica', fontSize=9,
@@ -402,7 +441,7 @@ def _build_modern(data: Dict) -> bytes:
 
     def _mod_section_header(title: str) -> None:
         main_items.append(Spacer(1, 4))
-        hr = HRFlowable(width='100%', thickness=1, color=EMERALD, spaceAfter=4)
+        hr = HRFlowable(width='100%', thickness=1, color=pal["dot"], spaceAfter=4)
         main_items.append(Paragraph(title.upper(), m_sec))
         main_items.append(hr)
 
@@ -458,17 +497,17 @@ _EXEC_TM      = _EXEC_HDR_H + 0.20 * inch
 _EXEC_CW      = PAGE_W - _EXEC_LM - _EXEC_RM
 
 
-def _exec_draw_header(canvas, doc, data: Dict):
-    """Draw the full-bleed navy header block on every page.
+def _exec_draw_header(canvas, doc, data: Dict, pal: Dict):
+    """Draw the full-bleed accent header block on every page.
     Canvas drawString uses raw text — no XML escaping needed here."""
     canvas.saveState()
 
-    # Navy fill
-    canvas.setFillColor(NAVY_DARK)
+    # Accent fill
+    canvas.setFillColor(pal["accent_dark"])
     canvas.rect(0, PAGE_H - _EXEC_HDR_H, PAGE_W, _EXEC_HDR_H, fill=1, stroke=0)
 
-    # Emerald accent stripe at bottom of header
-    canvas.setFillColor(EMERALD)
+    # Accent stripe at bottom of header
+    canvas.setFillColor(pal["dot"])
     canvas.rect(0, PAGE_H - _EXEC_HDR_H, PAGE_W, 3, fill=1, stroke=0)
 
     # Name
@@ -479,7 +518,7 @@ def _exec_draw_header(canvas, doc, data: Dict):
 
     # Headline
     if data.get('headline'):
-        canvas.setFillColor(EMERALD_LT)
+        canvas.setFillColor(pal["accent_light"])
         canvas.setFont('Helvetica', 11.5)
         canvas.drawCentredString(PAGE_W / 2, PAGE_H - 0.82 * inch, data['headline'])
 
@@ -494,19 +533,19 @@ def _exec_draw_header(canvas, doc, data: Dict):
     canvas.restoreState()
 
 
-def _exec_section_header(title: str) -> List:
-    """Emerald left-bar section header for Executive template."""
-    bar_s = ParagraphStyle('ExecBar', fontName='Helvetica-Bold', fontSize=0.1, textColor=EMERALD)
+def _exec_section_header(title: str, pal: Dict) -> List:
+    """Accent left-bar section header for Executive template."""
+    bar_s = ParagraphStyle('ExecBar', fontName='Helvetica-Bold', fontSize=0.1, textColor=pal["dot"])
     txt_s = ParagraphStyle(
         'ExecSec', fontName='Helvetica-Bold', fontSize=10,
-        textColor=NAVY, leading=12,
+        textColor=pal["accent"], leading=12,
     )
     t = Table(
         [['', Paragraph(title.upper(), txt_s)]],
         colWidths=[5, _EXEC_CW - 5],
     )
     t.setStyle(TableStyle([
-        ('BACKGROUND',    (0, 0), (0, 0), EMERALD),
+        ('BACKGROUND',    (0, 0), (0, 0), pal["dot"]),
         ('LEFTPADDING',   (0, 0), (0, 0), 0),
         ('RIGHTPADDING',  (0, 0), (0, 0), 0),
         ('LEFTPADDING',   (1, 0), (1, 0), 10),
@@ -518,12 +557,12 @@ def _exec_section_header(title: str) -> List:
     return [Spacer(1, 11), t, Spacer(1, 7)]
 
 
-def _build_executive(data: Dict) -> bytes:
+def _build_executive(data: Dict, pal: Dict) -> bytes:
     buf = BytesIO()
 
-    # Partial-apply data into the canvas callback
+    # Partial-apply data and palette into the canvas callback
     def _on_page(canvas, doc):
-        _exec_draw_header(canvas, doc, data)
+        _exec_draw_header(canvas, doc, data, pal)
 
     doc = SimpleDocTemplate(
         buf, pagesize=LETTER,
@@ -538,7 +577,7 @@ def _build_executive(data: Dict) -> bytes:
     )
     job_title_s = ParagraphStyle(
         'EJob', fontName='Helvetica-Bold', fontSize=10.5,
-        textColor=NAVY, leading=13,
+        textColor=pal["accent"], leading=13,
     )
     dates_s = ParagraphStyle(
         'EDates', fontName='Helvetica', fontSize=9,
@@ -546,7 +585,7 @@ def _build_executive(data: Dict) -> bytes:
     )
     company_s = ParagraphStyle(
         'ECo', fontName='Helvetica', fontSize=10,
-        textColor=EMERALD, leading=13, spaceAfter=3,
+        textColor=pal["dot"], leading=13, spaceAfter=3,
     )
     bullet_s = ParagraphStyle(
         'EBul', fontName='Helvetica', fontSize=9.5,
@@ -558,7 +597,7 @@ def _build_executive(data: Dict) -> bytes:
     )
     edu_inst_s = ParagraphStyle(
         'EEduInst', fontName='Helvetica-Bold', fontSize=10.5,
-        textColor=NAVY, leading=13, spaceAfter=1,
+        textColor=pal["accent"], leading=13, spaceAfter=1,
     )
     edu_deg_s = ParagraphStyle(
         'EEduDeg', fontName='Helvetica', fontSize=10,
@@ -573,12 +612,12 @@ def _build_executive(data: Dict) -> bytes:
 
     # Summary
     if data.get('summary'):
-        story += _exec_section_header('Executive Summary')
+        story += _exec_section_header('Executive Summary', pal)
         story.append(Paragraph(_e(data['summary']), body_s))
 
     # Experience
     if data.get('experience'):
-        story += _exec_section_header('Professional Experience')
+        story += _exec_section_header('Professional Experience', pal)
         for job in data['experience']:
             title_txt   = _e(job.get('title', ''))
             company_txt = _e(job.get('company', ''))
@@ -609,13 +648,13 @@ def _build_executive(data: Dict) -> bytes:
 
     # Skills
     if data.get('skills'):
-        story += _exec_section_header('Core Competencies')
+        story += _exec_section_header('Core Competencies', pal)
         skills_text = '   •   '.join(_e(s) for s in data['skills'])
         story.append(Paragraph(skills_text, skill_s))
 
     # Education
     if data.get('education'):
-        story += _exec_section_header('Education')
+        story += _exec_section_header('Education', pal)
         for edu in data['education']:
             story.append(Paragraph(_e(edu.get('institution', '')), edu_inst_s))
             if edu.get('degree'):
@@ -623,7 +662,7 @@ def _build_executive(data: Dict) -> bytes:
 
     # Certifications
     if data.get('certifications'):
-        story += _exec_section_header('Certifications')
+        story += _exec_section_header('Certifications', pal)
         for cert in data['certifications']:
             story.append(Paragraph(_e(cert.get('name', '')), cert_s))
 

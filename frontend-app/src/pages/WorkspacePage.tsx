@@ -218,7 +218,7 @@ export function WorkspacePage() {
   }
 
   // ── Next banner config ────────────────────────────────────────────────────
-  type Banner = { msg: string | null; btn: string | null; action: (() => void) | null; disabled: boolean }
+  type Banner = { msg: string | null; btn: string | null; action: (() => void) | null; disabled: boolean; skip?: { label: string; action: () => void } }
 
   const getBanner = (): Banner => {
     if (!resumeText) return {
@@ -252,16 +252,16 @@ export function WorkspacePage() {
         if (!isPro) return { msg: 'Resume Optimizer is a Pro feature', btn: 'Upgrade to Pro →', action: () => navigate('/pricing'), disabled: false }
         return { msg: 'AI rewrites every bullet to maximize your ATS match', btn: 'Optimize Now', action: runOptimize, disabled: false }
       }
-      return { msg: 'Resume ready — stand out further with a tailored cover letter', btn: 'Generate Cover Letter →', action: () => setActiveTab('cover-letter'), disabled: false }
+      return { msg: 'Resume ready — stand out further with a tailored cover letter', btn: 'Generate Cover Letter →', action: () => setActiveTab('cover-letter'), disabled: false, skip: { label: 'Skip to Download', action: () => setActiveTab('summary') } }
     }
 
     if (currentStep === 4) {
       if (isStreamingCover) return { msg: 'Writing your cover letter…', btn: null, action: null, disabled: true }
       if (!coverLetter) {
-        if (!isPro) return { msg: 'Cover Letter Generator is a Pro feature', btn: 'Upgrade to Pro →', action: () => navigate('/pricing'), disabled: false }
-        return { msg: 'AI writes a tailored, specific cover letter for this exact role', btn: 'Generate Cover Letter', action: runCoverLetter, disabled: false }
+        if (!isPro) return { msg: 'Cover Letter Generator is a Pro feature', btn: 'Upgrade to Pro →', action: () => navigate('/pricing'), disabled: false, skip: { label: 'Skip to Download', action: () => setActiveTab('summary') } }
+        return { msg: 'AI writes a tailored, specific cover letter for this exact role', btn: 'Generate Cover Letter', action: runCoverLetter, disabled: false, skip: { label: 'Skip to Download', action: () => setActiveTab('summary') } }
       }
-      return { msg: 'Almost there — optimize your LinkedIn to match this role', btn: 'Optimize LinkedIn →', action: () => setActiveTab('linkedin'), disabled: false }
+      return { msg: 'Almost there — optimize your LinkedIn to match this role', btn: 'Optimize LinkedIn →', action: () => setActiveTab('linkedin'), disabled: false, skip: { label: 'Skip to Download', action: () => setActiveTab('summary') } }
     }
 
     if (currentStep === 5) {
@@ -503,6 +503,17 @@ export function WorkspacePage() {
             </ErrorBoundary>
           )}
 
+          {/* ── Footer ── */}
+          <div style={{ marginTop: 40, paddingTop: 20, borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
+              <a href="/privacy" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Privacy Policy</a>
+              {' · '}
+              <a href="/terms" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Terms</a>
+              {' · '}
+              © {new Date().getFullYear()} AI Resume Studio
+            </p>
+          </div>
+
         </div>
       </main>
 
@@ -515,24 +526,38 @@ export function WorkspacePage() {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
         }}>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{banner.msg}</div>
-          {banner.btn && (
-            <button
-              onClick={banner.action ?? undefined}
-              disabled={banner.disabled}
-              style={{
-                flexShrink: 0, padding: '9px 20px',
-                background: banner.disabled ? 'var(--surface-1)' : 'var(--navy)',
-                color: banner.disabled ? 'var(--text-muted)' : 'white',
-                border: banner.disabled ? '1px solid var(--border)' : 'none',
-                borderRadius: 8, fontSize: 13, fontWeight: 700,
-                cursor: banner.disabled ? 'default' : 'pointer',
-                display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
-                transition: 'background 0.15s',
-              }}
-            >
-              {banner.btn}
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {banner.skip && (
+              <button
+                onClick={banner.skip.action}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer', padding: '4px 2px',
+                  fontSize: 12, color: 'var(--text-muted)', textDecoration: 'underline',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {banner.skip.label}
+              </button>
+            )}
+            {banner.btn && (
+              <button
+                onClick={banner.action ?? undefined}
+                disabled={banner.disabled}
+                style={{
+                  padding: '9px 20px',
+                  background: banner.disabled ? 'var(--surface-1)' : 'var(--navy)',
+                  color: banner.disabled ? 'var(--text-muted)' : 'white',
+                  border: banner.disabled ? '1px solid var(--border)' : 'none',
+                  borderRadius: 8, fontSize: 13, fontWeight: 700,
+                  cursor: banner.disabled ? 'default' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+                  transition: 'background 0.15s',
+                }}
+              >
+                {banner.btn}
+              </button>
+            )}
+          </div>
         </div>
       )}
 

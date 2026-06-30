@@ -37,7 +37,7 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
 - File size limit: 5MB on upload endpoint; PDF magic bytes check (`%PDF-` header)
 - Axios timeout: 60s with readable error message
 - Scorer consistency: optimize uses semantic scorer for displayed before/after scores
-- Full project cleanup: zero dead files, no duplicate frontends
+- Full project cleanup: zero dead files, no duplicate frontends (session 13: removed DashboardTab, Sidebar, SkeletonLoader, Button, scoreUtils + dead build_resume_optimization_prompt/optimize_resume_text from resume_service.py)
 - Company vision document: `AI-Resume-Studio-Vision.docx`
 - **Supabase auth**: signup, login, logout, session persistence via `AuthContext`
 - **Supabase profiles table**: auto-created on signup, `is_pro` field, RLS enabled

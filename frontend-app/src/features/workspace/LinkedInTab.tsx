@@ -1,4 +1,3 @@
-import { Button } from '../../components/Button'
 import { EmptyState, EmptyCard } from './shared'
 
 interface Props {
@@ -37,9 +36,17 @@ export function LinkedInTab({ result, isLoading, isStreaming, hasResume, targetR
             outline: 'none', boxSizing: 'border-box',
           }}
         />
-        <Button fullWidth size="lg" variant="secondary" disabled={!hasResume} onClick={onRun}>
+        <button
+          disabled={!hasResume}
+          onClick={onRun}
+          style={{
+            width: '100%', padding: '12px 20px', fontSize: 14, fontWeight: 600, borderRadius: 'var(--radius)',
+            background: hasResume ? 'var(--navy)' : 'var(--surface-2)', color: hasResume ? 'white' : 'var(--text-muted)',
+            border: 'none', cursor: hasResume ? 'pointer' : 'not-allowed', transition: 'opacity 0.15s ease',
+          }}
+        >
           💼 Optimize LinkedIn Profile
-        </Button>
+        </button>
         {error && <p style={{ color: 'var(--danger)', fontSize: 13, textAlign: 'center', marginTop: 8 }}>{error}</p>}
       </div>
     </EmptyCard>
@@ -94,13 +101,17 @@ export function LinkedInTab({ result, isLoading, isStreaming, hasResume, targetR
       <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)' }}>LinkedIn Headline</h3>
-          <Button
-            size="sm" variant="outline"
+          <button
             disabled={!headlineReady || !!isStreaming}
             onClick={() => navigator.clipboard.writeText(result?.headline ?? '')}
+            style={{
+              padding: '5px 12px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius)',
+              background: 'var(--surface-1)', color: 'var(--text-secondary)',
+              border: '1px solid var(--border)', cursor: 'pointer', opacity: (!headlineReady || !!isStreaming) ? 0.5 : 1,
+            }}
           >
             📋 Copy
-          </Button>
+          </button>
         </div>
         <div style={{ background: 'var(--surface-1)', borderRadius: 'var(--radius)', padding: '14px 16px', minHeight: 48, display: 'flex', alignItems: 'center' }}>
           {!headlineReady ? (
@@ -132,18 +143,45 @@ export function LinkedInTab({ result, isLoading, isStreaming, hasResume, targetR
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)' }}>About Section</h3>
           <div style={{ display: 'flex', gap: 8 }}>
-            <Button
-              size="sm" variant="outline"
+            <button
               disabled={!summaryReady || !!isStreaming}
               onClick={() => navigator.clipboard.writeText(result?.summary ?? '')}
+              style={{
+                padding: '5px 12px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius)',
+                background: 'var(--surface-1)', color: 'var(--text-secondary)',
+                border: '1px solid var(--border)', cursor: 'pointer', opacity: (!summaryReady || !!isStreaming) ? 0.5 : 1,
+              }}
             >
               📋 Copy
-            </Button>
+            </button>
             {!isLoading && (
-              <Button size="sm" variant="secondary" disabled={!!isStreaming} onClick={onRun}>Regenerate</Button>
+              <button
+                disabled={!!isStreaming}
+                onClick={onRun}
+                style={{
+                  padding: '5px 12px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius)',
+                  background: 'var(--navy)', color: 'white',
+                  border: 'none', cursor: isStreaming ? 'not-allowed' : 'pointer', opacity: isStreaming ? 0.5 : 1,
+                }}
+              >
+                Regenerate
+              </button>
             )}
           </div>
         </div>
+        {summaryReady && result?.summary && (
+          <p style={{ fontSize: 11, color: (() => {
+            const len = result.summary.length
+            if (len >= 1800 && len <= 2200) return 'var(--success)'
+            if (len > 2200 && len <= 2600) return 'var(--warning)'
+            if (len > 2600) return 'var(--danger)'
+            return 'var(--text-muted)'
+          })(), marginBottom: 6, textAlign: 'right' }}>
+            {result.summary.length.toLocaleString()} / 2,600 chars
+            {result.summary.length >= 1800 && result.summary.length <= 2200 && ' · optimal'}
+            {result.summary.length > 2600 && ' · too long'}
+          </p>
+        )}
         <div style={{ background: 'var(--surface-1)', borderRadius: 'var(--radius)', padding: '16px', maxHeight: 400, overflow: 'auto' }}>
           {!summaryReady ? (
             // Skeleton — paragraph block for About section

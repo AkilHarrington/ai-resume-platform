@@ -54,6 +54,17 @@ function computeLineDiff(original: string, optimized: string): DiffLine[] {
   return result
 }
 
+// ─── Palette picker ───────────────────────────────────────────────────────────
+
+const PALETTE_OPTIONS = [
+  { id: 'blue',       label: 'Navy',      hex: '#1A365D' },
+  { id: 'charcoal',   label: 'Charcoal',  hex: '#1F2937' },
+  { id: 'slate',      label: 'Slate',     hex: '#334155' },
+  { id: 'forest',     label: 'Forest',    hex: '#14532D' },
+  { id: 'monochrome', label: 'Mono',      hex: '#000000' },
+] as const
+type ResumePalette = typeof PALETTE_OPTIONS[number]['id']
+
 // ─── Template picker ──────────────────────────────────────────────────────────
 
 const TEMPLATE_OPTIONS: { id: ResumeTemplate; label: string; description: string; badge: string; preview: string }[] = [
@@ -301,6 +312,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
   const { session } = useAuth()
   const [view, setView] = useState<'optimized' | 'original' | 'changes'>('optimized')
   const [selectedTemplate, setSelectedTemplate] = useState<ResumeTemplate>('professional')
+  const [selectedPalette, setSelectedPalette] = useState<ResumePalette>('blue')
   const [isDownloading, setIsDownloading] = useState(false)
 
   const addedKeywords = useMemo(() => {
@@ -336,7 +348,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
       const resp = await fetch(`${API_BASE}/api/resume/download-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ resumeText: result.optimizedResumeText, template: selectedTemplate }),
+        body: JSON.stringify({ resumeText: result.optimizedResumeText, template: selectedTemplate, palette: selectedPalette }),
       })
       if (!resp.ok) {
         const detail = await resp.json().catch(() => ({}))
@@ -506,7 +518,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
         <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 6 }}>Download as PDF</h3>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>Choose a template and download your optimized resume as a polished PDF.</p>
-          <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 4 }}>
             {TEMPLATE_OPTIONS.map(t => {
               const selected = selectedTemplate === t.id
               return (
@@ -523,6 +535,53 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
               )
             })}
           </div>
+
+          {/* ── Context hints below template row ── */}
+          {selectedTemplate === 'professional' && selectedPalette === 'monochrome' && (
+            <p style={{ fontSize: 11, color: 'var(--success)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 4 }}>
+              ✓ <strong>Tech-optimized</strong> — single-column, ATS-safe format preferred for software engineering roles
+            </p>
+          )}
+          {selectedTemplate === 'modern' && (
+            <p style={{ fontSize: 11, color: 'var(--warning)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 4 }}>
+              ⚠ Two-column layouts may not parse correctly in some ATS systems. Use <button onClick={() => setSelectedTemplate('professional')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--navy)', fontWeight: 700, fontSize: 11, textDecoration: 'underline' }}>Professional</button> for guaranteed compatibility.
+            </p>
+          )}
+          {(selectedTemplate !== 'professional' || selectedPalette !== 'monochrome') && selectedTemplate !== 'modern' && (
+            <div style={{ marginBottom: 16 }} />
+          )}
+          {/* ── Palette picker ── */}
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>Color Scheme</p>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              {PALETTE_OPTIONS.map(p => {
+                const active = selectedPalette === p.id
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setSelectedPalette(p.id)}
+                    title={p.label}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                      background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                    }}
+                  >
+                    <div style={{
+                      width: 28, height: 28, borderRadius: '50%', background: p.hex,
+                      border: active ? `3px solid var(--text-primary)` : '3px solid transparent',
+                      boxShadow: active ? '0 0 0 1px var(--border)' : '0 0 0 1px var(--border)',
+                      transition: 'border-color 0.15s ease',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {active && <span style={{ color: 'white', fontSize: 12, fontWeight: 800 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: 10, color: active ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: active ? 600 : 400 }}>{p.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           <Button size="md" variant="secondary" onClick={handleDownloadPDF} disabled={isDownloading} style={{ minWidth: 180 }}>
             {isDownloading ? '⏳ Generating PDF...' : '⬇️ Download PDF'}
           </Button>

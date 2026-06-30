@@ -4,6 +4,19 @@ import { useAuth } from '../app/AuthContext'
 import { Logo } from '../components/Logo'
 import { Button } from '../components/Button'
 
+function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
+  if (pw.length === 0) return { score: 0, label: '', color: 'transparent' }
+  let score = 0
+  if (pw.length >= 8)  score++
+  if (pw.length >= 12) score++
+  if (/[A-Z]/.test(pw)) score++
+  if (/[0-9]/.test(pw)) score++
+  if (/[^A-Za-z0-9]/.test(pw)) score++
+  if (score <= 1) return { score: 1, label: 'Weak',   color: 'var(--danger)' }
+  if (score <= 3) return { score: 2, label: 'Fair',   color: 'var(--warning)' }
+  return              { score: 3, label: 'Strong', color: 'var(--success)' }
+}
+
 export function SignupPage() {
   const navigate = useNavigate()
   const { signUp } = useAuth()
@@ -13,11 +26,13 @@ export function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
 
+  const strength = getPasswordStrength(password)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.')
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.')
       return
     }
     setLoading(true)
@@ -75,10 +90,31 @@ export function SignupPage() {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
+              placeholder="At least 8 characters"
               required
               style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border-input)', borderRadius: 'var(--radius)', fontSize: 14, fontFamily: 'var(--font-sans)', boxSizing: 'border-box' }}
             />
+            {password.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                  {[1, 2, 3].map(i => (
+                    <div key={i} style={{
+                      flex: 1, height: 3, borderRadius: 2,
+                      background: i <= strength.score ? strength.color : 'var(--surface-2)',
+                      transition: 'background 0.2s ease',
+                    }} />
+                  ))}
+                </div>
+                <p style={{ fontSize: 11, color: strength.color, margin: 0, fontWeight: 600 }}>
+                  {strength.label}
+                  {strength.score < 3 && (
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+                      {' '}— try adding {!(/[A-Z]/.test(password)) ? 'an uppercase letter' : !(/[0-9]/.test(password)) ? 'a number' : 'a symbol'}
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
 
           {error && (

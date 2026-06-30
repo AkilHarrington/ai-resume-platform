@@ -618,6 +618,7 @@ from pydantic import BaseModel
 class ResumePdfRequest(BaseModel):
     resumeText: str
     template: str = "professional"
+    palette: str = "blue"
 
 class CoverLetterPdfRequest(BaseModel):
     coverLetterText: str
@@ -632,9 +633,10 @@ def resume_download_pdf(request: Request, data: ResumePdfRequest, user: dict = D
     template = data.template.lower().strip()
     if template not in ("professional", "modern", "executive"):
         template = "professional"
+    palette = data.palette.lower().strip() if data.palette else "blue"
     resume_data = parse_resume_text(data.resumeText)
     try:
-        pdf_bytes = generate_resume_pdf(resume_data, template)
+        pdf_bytes = generate_resume_pdf(resume_data, template, palette)
     except Exception as e:
         logger.error("PDF generation failed: %s", e)
         raise HTTPException(status_code=500, detail="PDF generation failed. Please try again.")
