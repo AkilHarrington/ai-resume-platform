@@ -713,7 +713,7 @@ def pro_status(request: Request, user: dict = Depends(get_current_user)):
     try:
         return {"isPro": get_user_pro_status(user["id"], user_jwt=raw_jwt)}
     except Exception as e:
-        logger.error("pro_status check failed for user %s: %s", user.get("id"), type(e).__name__)
+        logger.error("pro_status check failed for user %s: %s — %s", user.get("id"), type(e).__name__, str(e))
         raise HTTPException(status_code=503, detail="Unable to verify subscription status. Please try again in a moment.")
 
 
