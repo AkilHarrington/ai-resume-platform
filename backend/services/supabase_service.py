@@ -7,6 +7,7 @@
 import logging
 import os
 import jwt as pyjwt
+from jwt import PyJWKClient
 from supabase import create_client, Client
 
 logger = logging.getLogger("ai_resume_studio.supabase")
@@ -21,6 +22,16 @@ for _proxy_var in ("ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_
 # =========================================================
 
 _client: Client | None = None
+_jwks_client: PyJWKClient | None = None
+
+
+def _get_jwks_client() -> PyJWKClient:
+    """Singleton JWKS client — fetches Supabase's public keys once and caches them."""
+    global _jwks_client
+    if _jwks_client is None:
+        supabase_url = os.getenv("SUPABASE_URL", "")
+        _jwks_client = PyJWKClient(f"{supabase_url}/auth/v1/.well-known/jwks.json")
+    return _jwks_client
 
 
 def _get_client() -> Client:
@@ -36,29 +47,44 @@ def _get_client() -> Client:
 
 def verify_token(token: str) -> dict | None:
     """
-    Verify a Supabase JWT locally using the project's JWT secret.
+    Verify a Supabase JWT locally — supports both HS256 (legacy secret) and RS256 (JWKS).
 
-    This avoids a network round-trip to Supabase and is not affected by
-    SUPABASE_SERVICE_KEY format or Python 3.14/Pydantic V1 compatibility issues.
-    Requires SUPABASE_JWT_SECRET env var (Supabase Dashboard → Settings → API → JWT Secret).
+    Supabase projects created before mid-2024 use HS256; newer projects use RS256.
+    We check the token's 'alg' header and route to the right verifier automatically.
+    No network call to Supabase auth API — pure local crypto (RS256 fetches JWKS once on startup).
     """
     try:
-        jwt_secret = os.getenv("SUPABASE_JWT_SECRET", "")
-        if not jwt_secret:
-            logger.error("SUPABASE_JWT_SECRET not set — cannot verify tokens.")
-            return None
-        decoded = pyjwt.decode(
-            token,
-            jwt_secret,
-            algorithms=["HS256"],
-            options={"verify_aud": False},
-        )
+        header = pyjwt.get_unverified_header(token)
+        alg = header.get("alg", "RS256")
+
+        if alg == "HS256":
+            jwt_secret = os.getenv("SUPABASE_JWT_SECRET", "")
+            if not jwt_secret:
+                logger.error("SUPABASE_JWT_SECRET not set — cannot verify HS256 tokens.")
+                return None
+            decoded = pyjwt.decode(
+                token,
+                jwt_secret,
+                algorithms=["HS256"],
+                options={"verify_aud": False},
+            )
+        else:
+            # RS256 / ES256 — verify using Supabase's published public keys
+            signing_key = _get_jwks_client().get_signing_key_from_jwt(token)
+            decoded = pyjwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256", "ES256"],
+                options={"verify_aud": False},
+            )
+
         user_id = decoded.get("sub")
         email = decoded.get("email")
         if not user_id:
             logger.debug("verify_token: JWT missing 'sub' claim")
             return None
         return {"id": user_id, "email": email}
+
     except pyjwt.ExpiredSignatureError:
         logger.debug("verify_token: token expired")
         return None
