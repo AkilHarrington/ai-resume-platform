@@ -8,6 +8,7 @@
 
 import logging
 import os
+import time
 import httpx
 import jwt as pyjwt
 from jwt import PyJWKClient
@@ -38,11 +39,30 @@ def _get_jwks_client() -> PyJWKClient:
 # Direct PostgREST helpers — no Supabase SDK, no Pydantic
 # =========================================================
 
+def _make_service_jwt() -> str:
+    """
+    Sign a short-lived service_role JWT using the project's JWT secret.
+    PostgREST trusts any JWT signed with the project secret that has role=service_role.
+    This bypasses the SUPABASE_SERVICE_KEY format problem entirely.
+    """
+    secret = os.getenv("SUPABASE_JWT_SECRET", "")
+    if not secret:
+        raise RuntimeError("SUPABASE_JWT_SECRET not set — cannot authenticate with PostgREST.")
+    now = int(time.time())
+    payload = {
+        "role": "service_role",
+        "iss": "supabase",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    return pyjwt.encode(payload, secret, algorithm="HS256")
+
+
 def _db_headers() -> dict:
-    key = os.getenv("SUPABASE_SERVICE_KEY", "")
+    token = _make_service_jwt()
     return {
-        "apikey": key,
-        "Authorization": f"Bearer {key}",
+        "apikey": token,
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
 
