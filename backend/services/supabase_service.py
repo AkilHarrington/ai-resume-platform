@@ -6,6 +6,7 @@
 
 import logging
 import os
+import jwt as pyjwt
 from supabase import create_client, Client
 
 logger = logging.getLogger("ai_resume_studio.supabase")
@@ -34,18 +35,38 @@ def _get_client() -> Client:
 
 
 def verify_token(token: str) -> dict | None:
-    """Verify a Supabase JWT and return {id, email}, or None if invalid."""
+    """
+    Verify a Supabase JWT locally using the project's JWT secret.
+
+    This avoids a network round-trip to Supabase and is not affected by
+    SUPABASE_SERVICE_KEY format or Python 3.14/Pydantic V1 compatibility issues.
+    Requires SUPABASE_JWT_SECRET env var (Supabase Dashboard → Settings → API → JWT Secret).
+    """
     try:
-        client = _get_client()
-        response = client.auth.get_user(token)
-        user = response.user
-        if not user:
-            logger.debug("verify_token: get_user returned no user")
+        jwt_secret = os.getenv("SUPABASE_JWT_SECRET", "")
+        if not jwt_secret:
+            logger.error("SUPABASE_JWT_SECRET not set — cannot verify tokens.")
             return None
-        return {"id": user.id, "email": user.email}
-    except Exception as e:
-        # Log type only — token value must never appear in logs
+        decoded = pyjwt.decode(
+            token,
+            jwt_secret,
+            algorithms=["HS256"],
+            options={"verify_aud": False},
+        )
+        user_id = decoded.get("sub")
+        email = decoded.get("email")
+        if not user_id:
+            logger.debug("verify_token: JWT missing 'sub' claim")
+            return None
+        return {"id": user_id, "email": email}
+    except pyjwt.ExpiredSignatureError:
+        logger.debug("verify_token: token expired")
+        return None
+    except pyjwt.InvalidTokenError as e:
         logger.warning("verify_token failed: %s", type(e).__name__)
+        return None
+    except Exception as e:
+        logger.warning("verify_token failed unexpectedly: %s", type(e).__name__)
         return None
 
 
