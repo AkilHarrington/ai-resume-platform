@@ -282,6 +282,46 @@ export function streamLinkedIn(
   return readSSEStream('/api/v1/linkedin/stream', params, onChunk, onDone, onError)
 }
 
+// ─── AI Tools ────────────────────────────────────────────────────────────────
+
+export async function generateProfessionalSummary(params: {
+  resumeText: string
+  targetRole?: string
+  yearsExperience?: string
+}): Promise<{ summary: string }> {
+  const { data } = await api.post<{ summary: string }>('/api/v1/tools/professional-summary', params)
+  return data
+}
+
+export async function enhanceBullet(params: {
+  bulletText: string
+  targetRole?: string
+}): Promise<{ enhanced: string }> {
+  const { data } = await api.post<{ enhanced: string }>('/api/v1/tools/enhance-bullet', params)
+  return data
+}
+
+export async function downloadResumeDocx(params: {
+  resumeText: string
+  template?: string
+}): Promise<Blob> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const response = await fetch(`${API_BASE_URL}/api/v1/resume/download-docx`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: JSON.stringify(params),
+  })
+  if (!response.ok) {
+    const detail = await response.json().catch(() => ({ detail: 'Download failed' }))
+    if (response.status === 403) throw new Error('This feature requires a Pro plan.')
+    throw new Error((detail as { detail?: string }).detail || 'DOCX download failed')
+  }
+  return response.blob()
+}
+
 export async function createCheckoutSession(plan: 'monthly' | 'onetime'): Promise<{ url: string }> {
   const { data } = await api.post<{ url: string }>(`/api/v1/payments/create-checkout-session?plan=${plan}`)
   return data

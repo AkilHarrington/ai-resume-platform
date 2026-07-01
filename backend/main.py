@@ -23,6 +23,7 @@ from models.optimize_models import ResumeOptimizeRequest
 from models.scan_models import ResumeScanRequest
 from models.cover_letter_models import CoverLetterRequest
 from models.linkedin_models import LinkedInRequest
+from models.tools_models import ProfessionalSummaryRequest, BulletEnhanceRequest, ResumeDocxRequest
 from services.ats_service import calculate_ats_score
 from services.semantic_ats_service import semantic_ats_score
 from fastapi.responses import StreamingResponse
@@ -32,8 +33,11 @@ from services.resume_service import (
     generate_linkedin_optimization,
     stream_cover_letter,
     stream_linkedin_optimization,
+    generate_professional_summary,
+    enhance_bullet_point,
 )
 from services.pdf_service import generate_resume_pdf, generate_cover_letter_pdf
+from services.docx_service import generate_resume_docx
 from services.resume_parser import parse_resume_text
 from services.supabase_service import (
     get_user_by_email,
@@ -818,6 +822,66 @@ async def stripe_webhook(request: Request):
 
 
 # =========================================================
+# AI Tools — Professional Summary Generator (free, auth required)
+# sync def: runs in FastAPI's thread pool
+# =========================================================
+
+@app.post("/api/tools/professional-summary")
+@limiter.limit("10/minute")
+def tools_professional_summary(request: Request, data: ProfessionalSummaryRequest, user: dict = Depends(get_current_user)):
+    if not data.resumeText.strip():
+        raise HTTPException(status_code=400, detail="Resume text is required.")
+    result = generate_professional_summary(
+        resume_text=data.resumeText,
+        target_role=data.targetRole,
+        years_experience=data.yearsExperience,
+    )
+    return {"summary": result}
+
+
+# =========================================================
+# AI Tools — Bullet Point Enhancer (free, auth required)
+# =========================================================
+
+@app.post("/api/tools/enhance-bullet")
+@limiter.limit("20/minute")
+def tools_enhance_bullet(request: Request, data: BulletEnhanceRequest, user: dict = Depends(get_current_user)):
+    if not data.bulletText.strip():
+        raise HTTPException(status_code=400, detail="Bullet text is required.")
+    result = enhance_bullet_point(
+        bullet_text=data.bulletText,
+        target_role=data.targetRole,
+    )
+    return {"enhanced": result}
+
+
+# =========================================================
+# DOCX Download — Resume (Pro)
+# sync def: runs in FastAPI's thread pool
+# =========================================================
+
+@app.post("/api/resume/download-docx")
+@limiter.limit("10/minute")
+def resume_download_docx(request: Request, data: ResumeDocxRequest, user: dict = Depends(require_pro)):
+    if not data.resumeText.strip():
+        raise HTTPException(status_code=400, detail="Resume text is required.")
+    template = data.template.lower().strip()
+    if template not in ("professional", "modern", "executive"):
+        template = "professional"
+    try:
+        docx_bytes = generate_resume_docx(data.resumeText, template)
+    except Exception as e:
+        logger.error("DOCX generation failed: %s", e)
+        raise HTTPException(status_code=500, detail="DOCX generation failed. Please try again.")
+    filename = f"resume-{template}.docx"
+    return FastAPIResponse(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# =========================================================
 # API v1 versioned routes — same handlers, /api/v1/ prefix
 # Existing /api/ routes remain for backward compatibility.
 # Frontend should use /api/v1/ going forward.
@@ -834,7 +898,10 @@ _v1_routes = [
     ("/linkedin/optimize",                linkedin_optimize,          ["POST"]),
     ("/linkedin/stream",                  linkedin_stream,            ["POST"]),
     ("/resume/download-pdf",              resume_download_pdf,        ["POST"]),
+    ("/resume/download-docx",             resume_download_docx,       ["POST"]),
     ("/cover-letter/download-pdf",        cover_letter_download_pdf,  ["POST"]),
+    ("/tools/professional-summary",       tools_professional_summary, ["POST"]),
+    ("/tools/enhance-bullet",             tools_enhance_bullet,       ["POST"]),
     ("/payments/create-checkout-session", create_checkout_session,    ["POST"]),
     ("/user/pro-status",                  pro_status,                 ["GET"]),
     ("/payments/webhook",                 stripe_webhook,             ["POST"]),

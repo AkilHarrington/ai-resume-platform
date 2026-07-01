@@ -5,6 +5,7 @@ import { EmptyState, EmptyCard } from './shared'
 import { useToast } from '../../components/Toast'
 import { useAuth } from '../../app/AuthContext'
 import type { OptimizeResult } from '../../api/resumeApi'
+import { downloadResumeDocx } from '../../api/resumeApi'
 import type { ResumeTemplate } from '../../types/resumeTemplate'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -314,6 +315,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
   const [selectedTemplate, setSelectedTemplate] = useState<ResumeTemplate>('professional')
   const [selectedPalette, setSelectedPalette] = useState<ResumePalette>('blue')
   const [isDownloading, setIsDownloading] = useState(false)
+  const [isDownloadingDocx, setIsDownloadingDocx] = useState(false)
 
   const addedKeywords = useMemo(() => {
     if (!result) return []
@@ -366,6 +368,25 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
       showToast(err instanceof Error ? err.message : 'PDF generation failed.', 'error')
     } finally {
       setIsDownloading(false)
+    }
+  }
+
+  const handleDownloadDocx = async () => {
+    if (!result?.optimizedResumeText) return
+    setIsDownloadingDocx(true)
+    try {
+      const blob = await downloadResumeDocx({ resumeText: result.optimizedResumeText, template: selectedTemplate })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `resume-${selectedTemplate}.docx`
+      a.click()
+      URL.revokeObjectURL(url)
+      showToast('DOCX downloaded successfully')
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'DOCX generation failed.', 'error')
+    } finally {
+      setIsDownloadingDocx(false)
     }
   }
 
@@ -513,11 +534,11 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
         </div>
       )}
 
-      {/* ── PDF Download ── */}
+      {/* ── Download ── */}
       {hasOptimized && (
         <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 6 }}>Download as PDF</h3>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>Choose a template and download your optimized resume as a polished PDF.</p>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 6 }}>Download Resume</h3>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>Choose a template and download your optimized resume as PDF or DOCX.</p>
           <div style={{ display: 'flex', gap: 10, marginBottom: 4 }}>
             {TEMPLATE_OPTIONS.map(t => {
               const selected = selectedTemplate === t.id
@@ -582,9 +603,14 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
             </div>
           </div>
 
-          <Button size="md" variant="secondary" onClick={handleDownloadPDF} disabled={isDownloading} style={{ minWidth: 180 }}>
-            {isDownloading ? '⏳ Generating PDF...' : '⬇️ Download PDF'}
-          </Button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Button size="md" variant="secondary" onClick={handleDownloadPDF} disabled={isDownloading} style={{ minWidth: 160 }}>
+              {isDownloading ? '⏳ Generating...' : '⬇️ Download PDF'}
+            </Button>
+            <Button size="md" variant="outline" onClick={handleDownloadDocx} disabled={isDownloadingDocx} style={{ minWidth: 160 }}>
+              {isDownloadingDocx ? '⏳ Generating...' : '📄 Download DOCX'}
+            </Button>
+          </div>
         </div>
       )}
 

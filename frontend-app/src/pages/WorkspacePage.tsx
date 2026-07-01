@@ -9,6 +9,7 @@ import { OptimizeTab } from '../features/workspace/OptimizeTab'
 import { CoverLetterTab } from '../features/workspace/CoverLetterTab'
 import { LinkedInTab } from '../features/workspace/LinkedInTab'
 import { SummaryTab } from '../features/workspace/SummaryTab'
+import ToolsTab from '../features/workspace/ToolsTab'
 import { UpgradePrompt } from '../features/workspace/shared'
 import type { Tab } from '../features/workspace/shared'
 import { useIsMobile } from '../hooks/useIsMobile'
@@ -31,7 +32,7 @@ const STEPS: { id: Tab; label: string; short: string }[] = [
 ]
 
 const TAB_TO_STEP: Record<Tab, number> = {
-  'dashboard': 1, 'scan': 2, 'optimize': 3, 'cover-letter': 4, 'linkedin': 5, 'summary': 6,
+  'dashboard': 1, 'scan': 2, 'optimize': 3, 'cover-letter': 4, 'linkedin': 5, 'summary': 6, 'tools': 0,
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -319,6 +320,18 @@ export function WorkspacePage() {
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{user.email}</span>
         )}
         <button
+          onClick={() => setActiveTab(activeTab === 'tools' ? 'dashboard' : 'tools')}
+          aria-label="Writing tools"
+          style={{
+            background: activeTab === 'tools' ? 'var(--navy)' : 'var(--surface-1)',
+            color: activeTab === 'tools' ? 'white' : 'var(--text-secondary)',
+            border: '1px solid var(--border)', borderRadius: 6, padding: '3px 10px',
+            fontSize: 11, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          Tools
+        </button>
+        <button
           onClick={toggleTheme}
           aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 7px', cursor: 'pointer', fontSize: 12, lineHeight: 1 }}
@@ -485,6 +498,13 @@ export function WorkspacePage() {
                   feature="LinkedIn Optimizer"
                   description="Claude crafts a keyword-rich headline and summary optimized for your target role."
                 />
+          )}
+
+          {/* Tools: writing tools (not part of step flow) */}
+          {activeTab === 'tools' && (
+            <ErrorBoundary tabName="Writing Tools">
+              <ToolsTab resumeText={resumeText} targetRole={targetRole} />
+            </ErrorBoundary>
           )}
 
           {/* Summary: completion page */}

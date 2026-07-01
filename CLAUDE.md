@@ -109,6 +109,14 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
 3. **WiPay integration** + launch to Caribbean diaspora
 4. **Book meeting** with Caribbean recruitment agency
 
+## Stripe Atlas Notes
+- **Cost**: $500 USD (incorporation + first year registered agent), $100/year after
+- **Timeline**: 1–2 business days for Delaware incorporation; EIN takes 15–25 business days for non-US founders (no SSN)
+- **Non-US founder path**: No SSN required — apply for ITIN after incorporating. Can accept Stripe payments + open Mercury bank account BEFORE EIN arrives
+- **Included**: EIN, 83(b) election, Mercury/Brex bank access, $2,500 Stripe credits (good for ~$80k in processing fees at 2.9% + 30¢), ~$50k partner perks
+- **Start**: https://dashboard.stripe.com/register/atlas
+- **Status**: Not yet started — decision pending
+
 ### Deferred (explicit)
 - API versioning (/api/v1 prefix) — add after deploy, not before
 - Zod runtime validation for API responses — post-launch hardening

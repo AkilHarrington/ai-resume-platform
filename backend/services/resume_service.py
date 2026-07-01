@@ -425,6 +425,110 @@ def stream_linkedin_optimization(
         raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
 
 
+# =========================================================
+# Professional Summary Generator — Claude Haiku (fast)
+# =========================================================
+
+def generate_professional_summary(
+    resume_text: str,
+    target_role: str = "",
+    years_experience: str = "",
+) -> str:
+    """Generate a 3-4 sentence professional summary. Uses Haiku for speed."""
+    role_line = f"Target role: {target_role}" if target_role else ""
+    exp_line  = f"Years of experience: {years_experience}" if years_experience else ""
+
+    prompt = f"""You are a certified professional resume writer.
+
+Based on the resume below, write a 3-4 sentence professional summary for the top of the resume.
+
+Rules:
+- First sentence: professional identity + years of experience (e.g. "Operations Coordinator with 6 years...")
+- Second sentence: 1-2 specific, concrete achievements or areas of expertise from the resume
+- Third sentence: value statement aligned to the target role — what the candidate brings
+- Optional fourth sentence only if it adds real information; otherwise stop at three
+- Third person phrasing ("Operations professional with..." not "I am...")
+- No hollow phrases: no "results-driven", "team player", "passionate about", "dynamic", "detail-oriented"
+- Sound like a human wrote it — varied sentence structure, specific language
+
+{role_line}
+{exp_line}
+
+<resume>
+{resume_text}
+</resume>
+
+Return only the professional summary text. No labels, no intro, no commentary."""
+
+    client = _get_client()
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=400,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.content[0].text.strip()
+    except anthropic.AuthenticationError:
+        raise AIUnavailableError("Invalid Anthropic API key.")
+    except anthropic.RateLimitError:
+        raise AIUnavailableError("Anthropic rate limit reached. Please wait a moment and try again.")
+    except anthropic.APIStatusError as e:
+        raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}).")
+    except anthropic.APIConnectionError:
+        raise AIUnavailableError("Could not reach Claude. Check your internet connection.")
+    except Exception as e:
+        logger.error("generate_professional_summary unexpected error: %s: %s", type(e).__name__, e)
+        raise AIUnavailableError("Summary generation encountered an unexpected error.")
+
+
+# =========================================================
+# Bullet Point Enhancer — Claude Haiku (fast)
+# =========================================================
+
+def enhance_bullet_point(bullet_text: str, target_role: str = "") -> str:
+    """Rewrite a weak bullet point as strong, quantified, action-verb-led."""
+    role_line = f"Target role: {target_role}" if target_role else ""
+
+    prompt = f"""You are an expert resume writer.
+
+Rewrite this resume bullet point to be stronger, more specific, and results-focused.
+
+Rules:
+- Start with a strong action verb (past tense for previous roles, present for current)
+- Add specificity: scope, scale, result, timeframe, team size, or dollar amounts — only where the original implies it
+- Do NOT invent specific numbers, metrics, tools, or companies not present or implied in the original
+- Maximum 1-2 lines — a bullet, not a paragraph
+- No hollow phrases: no "spearheaded", "leveraged", "synergistic", "results-driven", "team player"
+- Return only the improved bullet text — no label, no explanation, no asterisk, no dash prefix
+
+{role_line}
+
+Original bullet:
+{bullet_text}
+
+Improved bullet:"""
+
+    client = _get_client()
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=180,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.content[0].text.strip().lstrip("•-– ").strip()
+    except anthropic.AuthenticationError:
+        raise AIUnavailableError("Invalid Anthropic API key.")
+    except anthropic.RateLimitError:
+        raise AIUnavailableError("Anthropic rate limit reached. Please wait a moment and try again.")
+    except anthropic.APIStatusError as e:
+        raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}).")
+    except anthropic.APIConnectionError:
+        raise AIUnavailableError("Could not reach Claude. Check your internet connection.")
+    except Exception as e:
+        logger.error("enhance_bullet_point unexpected error: %s: %s", type(e).__name__, e)
+        raise AIUnavailableError("Bullet enhancement encountered an unexpected error.")
+
+
 def _parse_linkedin_text(text: str) -> dict:
     if "HEADLINE:" in text and "SUMMARY:" in text:
         summary_idx = text.index("SUMMARY:")
