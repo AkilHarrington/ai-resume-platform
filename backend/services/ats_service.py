@@ -20,7 +20,7 @@ try:
     from nltk.stem import SnowballStemmer as _SnowballStemmer
     _stemmer = _SnowballStemmer("english")
     _NLTK_AVAILABLE = True
-except ImportError:  # pragma: no cover
+except Exception:  # pragma: no cover — catches ImportError + any Python 3.14 compat issues
     _stemmer = None  # type: ignore[assignment]
     _NLTK_AVAILABLE = False
 
