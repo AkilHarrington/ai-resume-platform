@@ -319,6 +319,14 @@ def root():
     return {"message": "AI Resume Studio API", "version": "3.0.0"}
 
 
+@app.get("/ping")
+def ping():
+    """Ultra-lightweight keep-warm endpoint.
+    Used by UptimeRobot (or similar) to prevent Render cold starts.
+    No DB calls, no env checks — just proves the process is alive."""
+    return {"ok": True}
+
+
 @app.get("/health")
 def health():
     issues = []
