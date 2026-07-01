@@ -8,7 +8,7 @@ from io import BytesIO
 from typing import Dict, List, Any
 from xml.sax.saxutils import escape as _xml_escape
 
-from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.pagesizes import LETTER, A4
 from reportlab.lib.units import inch
 from reportlab.lib.colors import HexColor, white, black
 from reportlab.lib.styles import ParagraphStyle
@@ -26,6 +26,7 @@ GRAY_200    = HexColor('#E5E7EB')
 GRAY_100    = HexColor('#F3F4F6')
 SIDEBAR_TXT = HexColor('#CBD5E0')   # light slate for sidebar secondary text
 WHITE       = white
+EMERALD     = HexColor('#047857')   # cover letter header accent
 
 PAGE_W, PAGE_H = LETTER  # 612 x 792 pt
 
@@ -73,25 +74,33 @@ def _get_palette(palette: str) -> Dict[str, Any]:
 # PUBLIC ENTRY POINTS
 # =============================================================================
 
-def generate_resume_pdf(resume_data: Dict, template: str = "professional", palette: str = "blue") -> bytes:
+def generate_resume_pdf(
+    resume_data: Dict,
+    template: str = "professional",
+    palette: str = "blue",
+    paper_size: str = "letter",
+) -> bytes:
     """
     Generate a resume PDF using ReportLab.
 
     Args:
         resume_data: Structured dict from parse_resume_text()
         template: "professional" | "modern" | "executive"
+        palette: color palette key (see PALETTES)
+        paper_size: "letter" (US default) | "a4" (international/Caribbean)
 
     Returns:
         PDF bytes
     """
     tpl = template.lower().strip()
     pal = _get_palette(palette)
+    page = A4 if paper_size.lower().strip() == "a4" else LETTER
     if tpl == "modern":
-        return _build_modern(resume_data, pal)
+        return _build_modern(resume_data, pal, page)
     elif tpl == "executive":
-        return _build_executive(resume_data, pal)
+        return _build_executive(resume_data, pal, page)
     else:
-        return _build_professional(resume_data, pal)
+        return _build_professional(resume_data, pal, page)
 
 
 def generate_cover_letter_pdf(cover_letter_text: str, company_name: str = "") -> bytes:
@@ -108,17 +117,17 @@ _PROF_LM = 0.65 * inch
 _PROF_RM = 0.65 * inch
 _PROF_TM = 0.55 * inch
 _PROF_BM = 0.50 * inch
-_PROF_CW = PAGE_W - _PROF_LM - _PROF_RM   # 7.2"
+# _PROF_CW is now computed per-call based on page size (see _build_professional)
 
 
-def _prof_banner(title: str, pal: Dict) -> Table:
+def _prof_banner(title: str, pal: Dict, col_width: float) -> Table:
     """Full-width accent section header for Professional template."""
     style = ParagraphStyle(
         'ProfBanner',
         fontName='Helvetica-Bold', fontSize=7.5,
         textColor=WHITE, leading=9, spaceAfter=0,
     )
-    t = Table([[Paragraph(title.upper(), style)]], colWidths=[_PROF_CW])
+    t = Table([[Paragraph(title.upper(), style)]], colWidths=[col_width])
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), pal["accent"]),
         ('LEFTPADDING',   (0, 0), (-1, -1), 6),
@@ -129,18 +138,24 @@ def _prof_banner(title: str, pal: Dict) -> Table:
     return t
 
 
-def _prof_section(story: List, title: str, pal: Dict) -> None:
+def _prof_section(story: List, title: str, pal: Dict, col_width: float) -> None:
     story.append(Spacer(1, 9))
-    story.append(_prof_banner(title, pal))
+    story.append(_prof_banner(title, pal, col_width))
     story.append(Spacer(1, 6))
 
 
-def _build_professional(data: Dict, pal: Dict) -> bytes:
+def _build_professional(data: Dict, pal: Dict, page=LETTER) -> bytes:
     buf = BytesIO()
+    page_w = page[0]
+    prof_cw = page_w - _PROF_LM - _PROF_RM
+    name = data.get('fullName', '') or ''
     doc = SimpleDocTemplate(
-        buf, pagesize=LETTER,
+        buf, pagesize=page,
         leftMargin=_PROF_LM, rightMargin=_PROF_RM,
         topMargin=_PROF_TM, bottomMargin=_PROF_BM,
+        title=f"{name} — Resume",
+        author=name,
+        subject="Resume",
     )
 
     # ── Styles ────────────────────────────────────────────────────────────────
@@ -215,12 +230,12 @@ def _build_professional(data: Dict, pal: Dict) -> bytes:
 
     # Summary
     if data.get('summary'):
-        _prof_section(story, 'Professional Summary', pal)
+        _prof_section(story, 'Professional Summary', pal, prof_cw)
         story.append(Paragraph(_e(data['summary']), body_s))
 
     # Experience
     if data.get('experience'):
-        _prof_section(story, 'Professional Experience', pal)
+        _prof_section(story, 'Professional Experience', pal, prof_cw)
         for job in data['experience']:
             title_txt = _e(job.get('title', ''))
             company_txt = _e(job.get('company', ''))
@@ -231,7 +246,7 @@ def _build_professional(data: Dict, pal: Dict) -> bytes:
             # Title + dates side-by-side
             title_row = Table(
                 [[Paragraph(title_txt, title_s), Paragraph(date_txt, dates_s)]],
-                colWidths=[_PROF_CW - 1.5 * inch, 1.5 * inch],
+                colWidths=[prof_cw - 1.5 * inch, 1.5 * inch],
             )
             title_row.setStyle(TableStyle([
                 ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
@@ -252,13 +267,13 @@ def _build_professional(data: Dict, pal: Dict) -> bytes:
 
     # Skills
     if data.get('skills'):
-        _prof_section(story, 'Skills', pal)
+        _prof_section(story, 'Skills', pal, prof_cw)
         skills_text = '   •   '.join(_e(s) for s in data['skills'])
         story.append(Paragraph(skills_text, skill_s))
 
     # Education
     if data.get('education'):
-        _prof_section(story, 'Education', pal)
+        _prof_section(story, 'Education', pal, prof_cw)
         for edu in data['education']:
             story.append(Paragraph(_e(edu.get('institution', '')), edu_inst_s))
             if edu.get('degree'):
@@ -266,7 +281,7 @@ def _build_professional(data: Dict, pal: Dict) -> bytes:
 
     # Certifications
     if data.get('certifications'):
-        _prof_section(story, 'Certifications', pal)
+        _prof_section(story, 'Certifications', pal, prof_cw)
         for cert in data['certifications']:
             story.append(Paragraph(_e(cert.get('name', '')), cert_s))
 
@@ -297,21 +312,24 @@ def _mod_draw_bg(canvas, doc, pal: Dict):
     """Paint the accent sidebar background before every page."""
     canvas.saveState()
     canvas.setFillColor(pal["accent_dark"])
-    canvas.rect(0, 0, _MOD_SIDEBAR_W, PAGE_H, fill=1, stroke=0)
+    ph = doc.pagesize[1] if hasattr(doc, 'pagesize') else PAGE_H
+    canvas.rect(0, 0, _MOD_SIDEBAR_W, ph, fill=1, stroke=0)
     canvas.restoreState()
 
 
-def _build_modern(data: Dict, pal: Dict) -> bytes:
+def _build_modern(data: Dict, pal: Dict, page=LETTER) -> bytes:
     buf = BytesIO()
+    page_w, page_h = page
+    name = data.get('fullName', '') or ''
 
     sidebar_frame = Frame(
-        0, 0, _MOD_SIDEBAR_W, PAGE_H,
+        0, 0, _MOD_SIDEBAR_W, page_h,
         leftPadding=_MOD_SIDE_PAD_L, rightPadding=_MOD_SIDE_PAD_R,
         topPadding=_MOD_SIDE_PAD_V, bottomPadding=_MOD_SIDE_PAD_V,
         id='sidebar',
     )
     main_frame = Frame(
-        _MOD_MAIN_X, 0, _MOD_MAIN_W, PAGE_H,
+        _MOD_MAIN_X, 0, _MOD_MAIN_W, page_h,
         leftPadding=_MOD_MAIN_PAD_L, rightPadding=_MOD_MAIN_PAD_R,
         topPadding=_MOD_MAIN_PAD_V, bottomPadding=_MOD_MAIN_PAD_V,
         id='main',
@@ -327,9 +345,12 @@ def _build_modern(data: Dict, pal: Dict) -> bytes:
     )
 
     doc = BaseDocTemplate(
-        buf, pagesize=LETTER,
+        buf, pagesize=page,
         pageTemplates=[page_template],
         leftMargin=0, rightMargin=0, topMargin=0, bottomMargin=0,
+        title=f"{name} — Resume",
+        author=name,
+        subject="Resume",
     )
 
     # ── Sidebar styles ────────────────────────────────────────────────────────
@@ -533,7 +554,7 @@ def _exec_draw_header(canvas, doc, data: Dict, pal: Dict):
     canvas.restoreState()
 
 
-def _exec_section_header(title: str, pal: Dict) -> List:
+def _exec_section_header(title: str, pal: Dict, col_width: float = _EXEC_CW) -> List:
     """Accent left-bar section header for Executive template."""
     bar_s = ParagraphStyle('ExecBar', fontName='Helvetica-Bold', fontSize=0.1, textColor=pal["dot"])
     txt_s = ParagraphStyle(
@@ -542,7 +563,7 @@ def _exec_section_header(title: str, pal: Dict) -> List:
     )
     t = Table(
         [['', Paragraph(title.upper(), txt_s)]],
-        colWidths=[5, _EXEC_CW - 5],
+        colWidths=[5, col_width - 5],
     )
     t.setStyle(TableStyle([
         ('BACKGROUND',    (0, 0), (0, 0), pal["dot"]),
@@ -557,17 +578,22 @@ def _exec_section_header(title: str, pal: Dict) -> List:
     return [Spacer(1, 11), t, Spacer(1, 7)]
 
 
-def _build_executive(data: Dict, pal: Dict) -> bytes:
+def _build_executive(data: Dict, pal: Dict, page=LETTER) -> bytes:
     buf = BytesIO()
+    name = data.get('fullName', '') or ''
 
     # Partial-apply data and palette into the canvas callback
     def _on_page(canvas, doc):
         _exec_draw_header(canvas, doc, data, pal)
 
+    exec_cw = page[0] - _EXEC_LM - _EXEC_RM
     doc = SimpleDocTemplate(
-        buf, pagesize=LETTER,
+        buf, pagesize=page,
         leftMargin=_EXEC_LM, rightMargin=_EXEC_RM,
         topMargin=_EXEC_TM, bottomMargin=_EXEC_BM,
+        title=f"{name} — Resume",
+        author=name,
+        subject="Resume",
     )
 
     # ── Styles ────────────────────────────────────────────────────────────────
@@ -612,12 +638,12 @@ def _build_executive(data: Dict, pal: Dict) -> bytes:
 
     # Summary
     if data.get('summary'):
-        story += _exec_section_header('Executive Summary', pal)
+        story += _exec_section_header('Executive Summary', pal, exec_cw)
         story.append(Paragraph(_e(data['summary']), body_s))
 
     # Experience
     if data.get('experience'):
-        story += _exec_section_header('Professional Experience', pal)
+        story += _exec_section_header('Professional Experience', pal, exec_cw)
         for job in data['experience']:
             title_txt   = _e(job.get('title', ''))
             company_txt = _e(job.get('company', ''))
@@ -627,7 +653,7 @@ def _build_executive(data: Dict, pal: Dict) -> bytes:
 
             job_row = Table(
                 [[Paragraph(title_txt, job_title_s), Paragraph(date_txt, dates_s)]],
-                colWidths=[_EXEC_CW - 1.6 * inch, 1.6 * inch],
+                colWidths=[exec_cw - 1.6 * inch, 1.6 * inch],
             )
             job_row.setStyle(TableStyle([
                 ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
@@ -648,13 +674,13 @@ def _build_executive(data: Dict, pal: Dict) -> bytes:
 
     # Skills
     if data.get('skills'):
-        story += _exec_section_header('Core Competencies', pal)
+        story += _exec_section_header('Core Competencies', pal, exec_cw)
         skills_text = '   •   '.join(_e(s) for s in data['skills'])
         story.append(Paragraph(skills_text, skill_s))
 
     # Education
     if data.get('education'):
-        story += _exec_section_header('Education', pal)
+        story += _exec_section_header('Education', pal, exec_cw)
         for edu in data['education']:
             story.append(Paragraph(_e(edu.get('institution', '')), edu_inst_s))
             if edu.get('degree'):
@@ -662,7 +688,7 @@ def _build_executive(data: Dict, pal: Dict) -> bytes:
 
     # Certifications
     if data.get('certifications'):
-        story += _exec_section_header('Certifications', pal)
+        story += _exec_section_header('Certifications', pal, exec_cw)
         for cert in data['certifications']:
             story.append(Paragraph(_e(cert.get('name', '')), cert_s))
 

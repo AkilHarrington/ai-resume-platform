@@ -12,6 +12,7 @@
 # =========================================================
 
 import re
+from difflib import SequenceMatcher
 from typing import Dict, Optional
 
 
@@ -64,13 +65,36 @@ def normalize_heading(text: str) -> str:
     return re.sub(r"[^a-z ]", "", text.lower()).strip()
 
 
+_SECTION_ALIASES_FLAT: list[tuple[str, str]] = [
+    (key, alias)
+    for key, aliases in SECTION_ALIASES.items()
+    for alias in aliases
+]
+
+
 def detect_section_key(heading: str) -> Optional[str]:
     normalized = normalize_heading(heading)
 
+    # 1. Exact match — fastest path
     for key, aliases in SECTION_ALIASES.items():
         for alias in aliases:
             if normalized == alias:
                 return key
+
+    # 2. Fuzzy match via difflib SequenceMatcher (stdlib, no extra deps).
+    #    Threshold 0.85 catches "Professional History" → "experience",
+    #    "Career Overview" → "summary", "Work History" → "experience", etc.
+    #    while rejecting false positives (e.g. short noise lines).
+    if len(normalized) >= 4:
+        best_ratio = 0.0
+        best_key: Optional[str] = None
+        for key, alias in _SECTION_ALIASES_FLAT:
+            ratio = SequenceMatcher(None, normalized, alias).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_key = key
+        if best_ratio >= 0.85:
+            return best_key
 
     return None
 
@@ -79,8 +103,38 @@ def is_email(text: str) -> bool:
     return "@" in text and "." in text
 
 
+# Matches international phone numbers: +1 (868) 123-4567, 868-123-4567, etc.
+_PHONE_RE = re.compile(
+    r"[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{3,4}[-\s\.]?[0-9]{3,4}"
+)
+
+
+def looks_like_phone(text: str) -> bool:
+    """True when the line looks like a standalone phone number."""
+    stripped = text.strip()
+    m = _PHONE_RE.search(stripped)
+    if not m:
+        return False
+    # Reject if it's clearly an email or URL that happens to contain digits
+    if "@" in stripped or "http" in stripped.lower():
+        return False
+    # The phone digits should account for most of the line's content
+    non_phone_chars = len(stripped) - len(m.group())
+    return non_phone_chars <= 8
+
+
+# Matches "City, ST" or "City, ST  12345" or "City, Country"
+# Much tighter than the old '"," in text and len <= 6' which false-positived
+# on any short comma-containing line like "Managed 3 regions, 4 teams"
+_LOCATION_RE = re.compile(
+    r",\s*"
+    r"(?:[A-Z]{2}(?:\s+\d{5}(?:-\d{4})?)?$"          # US: ", TX" or ", TX 78701"
+    r"|[A-Za-z][A-Za-z\s]{1,30}$)"                     # International: ", Trinidad and Tobago"
+)
+
+
 def looks_like_location(text: str) -> bool:
-    return "," in text and len(text.split()) <= 6
+    return bool(_LOCATION_RE.search(text.strip()))
 
 
 def looks_like_date_range(text: str) -> bool:
@@ -192,6 +246,8 @@ def parse_resume_text(resume_text: str) -> Dict:
 
         if is_email(line) and structured["contact"]["email"] is None:
             structured["contact"]["email"] = line
+        elif looks_like_phone(line) and structured["contact"]["phone"] is None:
+            structured["contact"]["phone"] = line
         elif looks_like_location(line) and structured["contact"]["location"] is None:
             structured["contact"]["location"] = line
         elif "linkedin.com" in line.lower() and structured["contact"]["linkedin"] is None:

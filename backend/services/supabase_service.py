@@ -19,6 +19,32 @@ for _proxy_var in ("ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_
     os.environ.pop(_proxy_var, None)
 
 # =========================================================
+# httpx connection pool singleton
+# =========================================================
+# Bare httpx.get/post/patch calls open a new TCP+TLS connection per call,
+# costing 40-60ms per handshake. A persistent Client with keepalive reuses
+# connections across the 2-4 Supabase calls made per user request.
+# Reference: httpx docs 2026 — "Recreating clients per request kills
+# connection reuse and TLS handshakes."
+
+_http_client: httpx.Client | None = None
+
+
+def _get_http_client() -> httpx.Client:
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.Client(
+            limits=httpx.Limits(
+                max_keepalive_connections=10,
+                max_connections=20,
+                keepalive_expiry=30,
+            ),
+            timeout=httpx.Timeout(10.0, connect=5.0),
+        )
+    return _http_client
+
+
+# =========================================================
 # JWKS client for RS256 JWT verification
 # =========================================================
 
@@ -147,11 +173,10 @@ def get_user_pro_status(user_id: str, user_jwt: str | None = None) -> bool:
         else:
             headers = _db_headers()
 
-        resp = httpx.get(
+        resp = _get_http_client().get(
             _db_url("profiles"),
             headers=headers,
             params={"select": "is_pro", "id": f"eq.{user_id}"},
-            timeout=10,
         )
         if resp.status_code == 200:
             data = resp.json()
@@ -166,7 +191,7 @@ def get_user_pro_status(user_id: str, user_jwt: str | None = None) -> bool:
 
 def set_user_pro(user_id: str, stripe_customer_id: str = "", stripe_subscription_id: str = "") -> None:
     """Flip is_pro=true for a user after successful Stripe payment."""
-    resp = httpx.post(
+    resp = _get_http_client().post(
         _db_url("profiles"),
         headers={**_db_headers(), "Prefer": "resolution=merge-duplicates"},
         json={
@@ -175,7 +200,6 @@ def set_user_pro(user_id: str, stripe_customer_id: str = "", stripe_subscription
             "stripe_customer_id": stripe_customer_id,
             "stripe_subscription_id": stripe_subscription_id,
         },
-        timeout=10,
     )
     if resp.status_code not in (200, 201):
         logger.error("set_user_pro failed for %s: %s %s", user_id, resp.status_code, resp.text[:200])
@@ -183,12 +207,11 @@ def set_user_pro(user_id: str, stripe_customer_id: str = "", stripe_subscription
 
 def revoke_user_pro(stripe_customer_id: str) -> None:
     """Flip is_pro=false when a Stripe subscription is cancelled."""
-    resp = httpx.patch(
+    resp = _get_http_client().patch(
         _db_url("profiles"),
         headers=_db_headers(),
         params={"stripe_customer_id": f"eq.{stripe_customer_id}"},
         json={"is_pro": False},
-        timeout=10,
     )
     if resp.status_code not in (200, 204):
         logger.error("revoke_user_pro failed for customer %s: %s", stripe_customer_id, resp.status_code)
@@ -251,11 +274,10 @@ def log_scan_result(
         if seniority_level:
             payload["seniority_level"] = seniority_level
 
-        resp = httpx.post(
+        resp = _get_http_client().post(
             _db_url("scan_results"),
             headers=_db_headers(),
             json=payload,
-            timeout=10,
         )
         if resp.status_code not in (200, 201):
             logger.warning(
@@ -274,11 +296,10 @@ def is_stripe_event_processed(event_id: str) -> bool:
     """Return True if this Stripe event ID has already been processed.
     Fails open (returns False) on error — better to process twice than miss a payment."""
     try:
-        resp = httpx.get(
+        resp = _get_http_client().get(
             _db_url("stripe_events"),
             headers=_db_headers(),
             params={"select": "event_id", "event_id": f"eq.{event_id}"},
-            timeout=5,
         )
         if resp.status_code == 200:
             return len(resp.json()) > 0
@@ -292,11 +313,10 @@ def is_stripe_event_processed(event_id: str) -> bool:
 def mark_stripe_event_processed(event_id: str, event_type: str) -> None:
     """Record a Stripe event ID as processed. Fails silently — never blocks webhook response."""
     try:
-        httpx.post(
+        _get_http_client().post(
             _db_url("stripe_events"),
             headers={**_db_headers(), "Prefer": "resolution=merge-duplicates"},
             json={"event_id": event_id, "event_type": event_type},
-            timeout=5,
         )
     except Exception as e:
         logger.warning("mark_stripe_event_processed failed (non-blocking): %s", type(e).__name__)
@@ -305,11 +325,10 @@ def mark_stripe_event_processed(event_id: str, event_type: str) -> None:
 def get_user_by_email(email: str) -> dict | None:
     """Look up a profile by email (used for webhook matching)."""
     try:
-        resp = httpx.get(
+        resp = _get_http_client().get(
             _db_url("profiles"),
             headers=_db_headers(),
             params={"select": "id,email,is_pro", "email": f"eq.{email}"},
-            timeout=10,
         )
         if resp.status_code == 200:
             data = resp.json()

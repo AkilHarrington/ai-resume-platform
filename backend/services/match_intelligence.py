@@ -123,9 +123,23 @@ def split_lines(text: str) -> list[str]:
 
 
 def keyword_in_text(keyword: str, text: str) -> bool:
+    """
+    Check for keyword presence using word-boundary matching.
+
+    Uses `\\b` anchors via re.search so that checking "analyst" does NOT match
+    "analysis" or "analysts" (bare `in` check would false-positive on both).
+    Special-cased symbols (%, $) use bare substring check since they are not
+    word characters and `\\b` has no meaning around them.
+
+    Reference: Python docs — re module, word-boundary assertions (2026).
+    """
     if keyword in {"%", "$"}:
         return keyword in text
-    return keyword in text
+    try:
+        return bool(re.search(r"\b" + re.escape(keyword) + r"\b", text))
+    except re.error:
+        # Fallback for any edge-case pattern (shouldn't occur with re.escape)
+        return keyword in text
 
 
 def extract_experience_lines(parsed_resume: dict) -> list[str]:

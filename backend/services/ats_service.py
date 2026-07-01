@@ -11,6 +11,19 @@ import re
 from services.resume_parser import parse_resume_text
 from services.match_intelligence import build_match_intelligence
 
+# =========================================================
+# NLTK SnowballStemmer — more accurate than hand-rolled suffix stripping.
+# Handles irregular forms: "analyses" → "analys", "strategically" → "strateg".
+# Graceful fallback to legacy logic when nltk is not installed.
+# =========================================================
+try:
+    from nltk.stem import SnowballStemmer as _SnowballStemmer
+    _stemmer = _SnowballStemmer("english")
+    _NLTK_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _stemmer = None  # type: ignore[assignment]
+    _NLTK_AVAILABLE = False
+
 
 STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
@@ -188,7 +201,7 @@ INDUSTRY_KEYWORDS = {
     "healthcare": {
         "clinical", "hospital", "patient", "patients", "healthcare",
         "medical", "care", "nursing", "outpatient", "emergency",
-        "compliance", "clinical operations",
+        "compliance", "clinical operations", "ehr", "hipaa", "physician",
     },
     "sports": {
         "athlete", "athletes", "sports", "coaching", "coach",
@@ -198,17 +211,57 @@ INDUSTRY_KEYWORDS = {
     "construction": {
         "construction", "contractor", "contractors", "infrastructure",
         "project site", "site", "scheduling", "budgeting",
-        "regulatory compliance", "risk management",
+        "regulatory compliance", "risk management", "blueprint", "subcontractor",
     },
     "finance": {
         "accounting", "forecasting", "variance", "budget",
         "financial", "compliance", "ledger", "reconciliation",
-        "modeling", "analysis",
+        "modeling", "analysis", "audit", "tax", "gaap", "ifrs",
     },
     "technology": {
         "software", "api", "apis", "engineering", "developer",
         "developers", "frontend", "backend", "cloud", "database",
-        "platform", "systems",
+        "platform", "systems", "devops", "kubernetes", "microservices",
+    },
+    "marketing": {
+        "marketing", "campaign", "campaigns", "brand", "branding",
+        "advertising", "seo", "sem", "paid media", "content strategy",
+        "social media", "influencer", "conversion", "funnel", "ctr", "roas",
+    },
+    "operations": {
+        "operations", "process improvement", "lean", "six sigma",
+        "supply chain", "logistics", "procurement", "vendor management",
+        "kpi", "workflow", "capacity planning", "sla",
+    },
+    "legal": {
+        "attorney", "counsel", "litigation", "contract", "contracts",
+        "legal", "paralegal", "compliance", "regulatory", "jurisdiction",
+        "discovery", "brief", "arbitration", "mediation",
+    },
+    "education": {
+        "curriculum", "instruction", "teaching", "classroom", "students",
+        "pedagogy", "academic", "faculty", "learning outcomes", "assessment",
+        "syllabus", "accreditation", "k-12", "higher education",
+    },
+    "retail": {
+        "retail", "ecommerce", "e-commerce", "merchandising", "inventory",
+        "pos", "shopify", "amazon", "fulfillment", "customer experience",
+        "category management", "upc", "sku", "store operations",
+    },
+    "logistics": {
+        "logistics", "supply chain", "freight", "shipping", "warehouse",
+        "distribution", "last mile", "carrier", "erp", "sap",
+        "demand planning", "inventory management", "3pl",
+    },
+    "nonprofit": {
+        "nonprofit", "grant", "grants", "fundraising", "donor",
+        "community outreach", "volunteer", "mission", "501c3",
+        "impact", "advocacy", "social services", "program management",
+    },
+    "cybersecurity": {
+        "security", "cybersecurity", "penetration testing", "soc",
+        "incident response", "threat intelligence", "siem", "firewall",
+        "vulnerability", "cissp", "cism", "zero trust", "encryption",
     },
 }
 
@@ -244,9 +297,26 @@ ACTION_LINE_STARTERS = {
 
 
 def normalize_word(word: str) -> str:
-    word = word.lower().strip()
-    word = word.replace("’", "").replace("'", "")
+    """
+    Normalize a word to its stem for keyword matching.
 
+    Uses NLTK SnowballStemmer when available (more accurate than hand-rolled
+    suffix stripping — handles "analyses"→"analys", "strategically"→"strateg").
+    Falls back to legacy suffix-stripping when nltk is not installed.
+
+    Reference: NLTK Snowball docs; Lovins (1968) stemmer benchmarks.
+    """
+    word = word.lower().strip()
+    word = word.replace("‘", "").replace("’", "").replace("’", "")
+
+    if not word:
+        return word
+
+    # NLTK SnowballStemmer path — preferred
+    if _NLTK_AVAILABLE and _stemmer is not None and len(word) > 3:
+        return _stemmer.stem(word)
+
+    # ── Legacy fallback (used when NLTK not installed) ────────────────────
     if word in {"analysis", "analyzing", "analytical"}:
         return "analyst"
 
@@ -556,7 +626,7 @@ def score_industry_alignment(resume_text: str, job_description: str) -> tuple[in
     job_industry = detect_industry(job_description)
 
     if resume_industry == "general" and job_industry == "general":
-        raw_score = 95
+        raw_score = 70  # was 95 — both being undetected ≠ strong match
     elif resume_industry == "general" or job_industry == "general":
         raw_score = 80
     elif resume_industry == job_industry:

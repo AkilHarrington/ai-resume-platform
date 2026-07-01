@@ -244,15 +244,12 @@ def stream_resume_optimization(
         raise AIUnavailableError("Resume optimization encountered an unexpected error. Please try again.")
 
 
-def _build_cover_letter_prompt(
-    resume_text: str,
-    job_description: str,
-    company_name: str = "",
-    candidate_name: str = "",
-) -> str:
-    company_line = f"Company: {company_name}" if company_name else ""
-    candidate_line = f"Candidate name: {candidate_name}" if candidate_name else ""
-    return f"""You are an expert career coach writing a cover letter for a real human professional.
+# =========================================================
+# Cover letter system prompt — cached with cache_control: ephemeral
+# Instructions stay static; only resume+JD+names go in user message.
+# =========================================================
+
+COVER_LETTER_SYSTEM_PROMPT = """You are an expert career coach writing a cover letter for a real human professional.
 
 The letter must sound like it was written by the candidate themselves — confident, specific, and human.
 Recruiters read hundreds of AI-generated cover letters daily. This one must not sound like one of them.
@@ -273,37 +270,38 @@ Recruiters read hundreds of AI-generated cover letters daily. This one must not 
 - Do not fabricate experience, companies, or achievements not present in the resume
 - Return the cover letter text only — no explanations, no meta-commentary, no subject line
 
-{candidate_line}
-{company_line}
+The user message contains the candidate name (optional), company name (optional), resume (in <resume> tags), and job description (in <job_description> tags). Write the cover letter now."""
 
-<resume>
+
+def _build_cover_letter_user_message(
+    resume_text: str,
+    job_description: str,
+    company_name: str = "",
+    candidate_name: str = "",
+) -> str:
+    """User message: dynamic data only. Instructions live in the cached system prompt."""
+    lines = []
+    if candidate_name:
+        lines.append(f"Candidate name: {candidate_name}")
+    if company_name:
+        lines.append(f"Company: {company_name}")
+    header = "\n".join(lines) + "\n\n" if lines else ""
+    return f"""{header}<resume>
 {resume_text}
 </resume>
 
 <job_description>
 {job_description}
-</job_description>
-
-Write the cover letter now:"""
+</job_description>"""
 
 
-def _build_linkedin_prompt(
-    resume_text: str,
-    job_description: str = "",
-    target_role: str = "",
-) -> str:
-    target_line = f"Target role: {target_role}" if target_role else ""
-    jd_section = f"\n<job_description>\n{job_description}\n</job_description>" if job_description else ""
-    return f"""You are a LinkedIn optimization expert and career strategist.
+# =========================================================
+# LinkedIn system prompt — cached with cache_control: ephemeral
+# =========================================================
 
-Based on the resume below, generate optimized LinkedIn profile content.
+LINKEDIN_SYSTEM_PROMPT = """You are a LinkedIn optimization expert and career strategist.
 
-{target_line}
-
-<resume>
-{resume_text}
-</resume>
-{jd_section}
+Based on the resume and optional job description provided, generate optimized LinkedIn profile content.
 
 Return your response in this exact format:
 
@@ -319,19 +317,37 @@ since LinkedIn truncates the preview at ~300 characters on desktop.]
 Return only the headline and summary in the format above."""
 
 
+def _build_linkedin_user_message(
+    resume_text: str,
+    job_description: str = "",
+    target_role: str = "",
+) -> str:
+    """User message: dynamic data only. Instructions live in the cached system prompt."""
+    target_line = f"Target role: {target_role}\n\n" if target_role else ""
+    jd_section = f"\n<job_description>\n{job_description}\n</job_description>" if job_description else ""
+    return f"""{target_line}<resume>
+{resume_text}
+</resume>{jd_section}"""
+
+
 def generate_cover_letter(
     resume_text: str,
     job_description: str,
     company_name: str = "",
     candidate_name: str = "",
 ) -> str:
-    prompt = _build_cover_letter_prompt(resume_text, job_description, company_name, candidate_name)
+    user_message = _build_cover_letter_user_message(resume_text, job_description, company_name, candidate_name)
     client = _get_client()
     try:
         response = client.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}],
+            system=[{
+                "type": "text",
+                "text": COVER_LETTER_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": user_message}],
         )
         return response.content[0].text.strip()
     except anthropic.AuthenticationError:
@@ -354,13 +370,18 @@ def stream_cover_letter(
     candidate_name: str = "",
 ):
     """Generator: yields raw text chunks from Claude's streaming API."""
-    prompt = _build_cover_letter_prompt(resume_text, job_description, company_name, candidate_name)
+    user_message = _build_cover_letter_user_message(resume_text, job_description, company_name, candidate_name)
     client = _get_client()
     try:
         with client.messages.stream(
             model=CLAUDE_MODEL,
             max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}],
+            system=[{
+                "type": "text",
+                "text": COVER_LETTER_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": user_message}],
         ) as stream:
             for text in stream.text_stream:
                 yield text
@@ -379,13 +400,18 @@ def generate_linkedin_optimization(
     job_description: str = "",
     target_role: str = "",
 ) -> dict:
-    prompt = _build_linkedin_prompt(resume_text, job_description, target_role)
+    user_message = _build_linkedin_user_message(resume_text, job_description, target_role)
     client = _get_client()
     try:
         response = client.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}],
+            system=[{
+                "type": "text",
+                "text": LINKEDIN_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": user_message}],
         )
         text = response.content[0].text.strip()
         return _parse_linkedin_text(text)
@@ -408,13 +434,18 @@ def stream_linkedin_optimization(
     target_role: str = "",
 ):
     """Generator: yields raw text chunks from Claude's streaming API."""
-    prompt = _build_linkedin_prompt(resume_text, job_description, target_role)
+    user_message = _build_linkedin_user_message(resume_text, job_description, target_role)
     client = _get_client()
     try:
         with client.messages.stream(
             model=CLAUDE_MODEL,
             max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}],
+            system=[{
+                "type": "text",
+                "text": LINKEDIN_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": user_message}],
         ) as stream:
             for text in stream.text_stream:
                 yield text
@@ -432,18 +463,9 @@ def stream_linkedin_optimization(
 # Professional Summary Generator — Claude Haiku (fast)
 # =========================================================
 
-def generate_professional_summary(
-    resume_text: str,
-    target_role: str = "",
-    years_experience: str = "",
-) -> str:
-    """Generate a 3-4 sentence professional summary. Uses Haiku for speed."""
-    role_line = f"Target role: {target_role}" if target_role else ""
-    exp_line  = f"Years of experience: {years_experience}" if years_experience else ""
+SUMMARY_SYSTEM_PROMPT = """You are a certified professional resume writer.
 
-    prompt = f"""You are a certified professional resume writer.
-
-Based on the resume below, write a 3-4 sentence professional summary for the top of the resume.
+Write a 3-4 sentence professional summary for the top of a resume.
 
 Rules:
 - Write entirely in third person — use job title or noun phrase, NEVER the candidate's name
@@ -455,21 +477,35 @@ Rules:
 - No hollow phrases: no "results-driven", "team player", "passionate about", "dynamic", "detail-oriented"
 - Sound like a human wrote it — varied sentence structure, specific language
 
-{role_line}
-{exp_line}
-
-<resume>
-{resume_text}
-</resume>
-
+The user message contains the target role (optional), years of experience (optional), and resume (in <resume> tags).
 Return only the professional summary text. No labels, no intro, no commentary."""
+
+
+def generate_professional_summary(
+    resume_text: str,
+    target_role: str = "",
+    years_experience: str = "",
+) -> str:
+    """Generate a 3-4 sentence professional summary. Uses Haiku for speed."""
+    lines = []
+    if target_role:
+        lines.append(f"Target role: {target_role}")
+    if years_experience:
+        lines.append(f"Years of experience: {years_experience}")
+    header = "\n".join(lines) + "\n\n" if lines else ""
+    user_message = f"{header}<resume>\n{resume_text}\n</resume>"
 
     client = _get_client()
     try:
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=400,
-            messages=[{"role": "user", "content": prompt}],
+            system=[{
+                "type": "text",
+                "text": SUMMARY_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": user_message}],
         )
         return response.content[0].text.strip()
     except anthropic.AuthenticationError:
@@ -489,13 +525,9 @@ Return only the professional summary text. No labels, no intro, no commentary.""
 # Bullet Point Enhancer — Claude Haiku (fast)
 # =========================================================
 
-def enhance_bullet_point(bullet_text: str, target_role: str = "") -> str:
-    """Rewrite a weak bullet point as strong, quantified, action-verb-led."""
-    role_line = f"Target role: {target_role}" if target_role else ""
+BULLET_SYSTEM_PROMPT = """You are an expert resume writer.
 
-    prompt = f"""You are an expert resume writer.
-
-Rewrite this resume bullet point to be stronger, more specific, and results-focused.
+Rewrite the resume bullet point provided to be stronger, more specific, and results-focused.
 
 Rules:
 - Start with a strong action verb (past tense for previous roles, present for current)
@@ -504,21 +536,25 @@ Rules:
 - Use placeholders generously — they are more useful than vague language
 - Maximum 1-2 lines — a bullet, not a paragraph
 - No hollow phrases: no "spearheaded", "leveraged", "synergistic", "results-driven", "team player"
-- Return only the improved bullet text — no label, no explanation, no asterisk, no dash prefix
+- Return only the improved bullet text — no label, no explanation, no asterisk, no dash prefix"""
 
-{role_line}
 
-Original bullet:
-{bullet_text}
-
-Improved bullet:"""
+def enhance_bullet_point(bullet_text: str, target_role: str = "") -> str:
+    """Rewrite a weak bullet point as strong, quantified, action-verb-led."""
+    role_line = f"Target role: {target_role}\n\n" if target_role else ""
+    user_message = f"{role_line}Original bullet:\n{bullet_text}"
 
     client = _get_client()
     try:
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=180,
-            messages=[{"role": "user", "content": prompt}],
+            system=[{
+                "type": "text",
+                "text": BULLET_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": user_message}],
         )
         return response.content[0].text.strip().lstrip("•-– ").strip()
     except anthropic.AuthenticationError:
