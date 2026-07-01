@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../app/AuthContext'
 import { Logo } from '../components/Logo'
 import { Button } from '../components/Button'
+import { IconMail } from '../features/workspace/shared'
 
 function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
   if (pw.length === 0) return { score: 0, label: '', color: 'transparent' }
@@ -49,7 +50,7 @@ export function SignupPage() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--surface-page)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-sans)' }}>
         <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-xl)', padding: '48px 36px', width: '100%', maxWidth: 420, boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)', textAlign: 'center' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>📬</div>
+          <div style={{ display: 'flex', justifyContent: 'center', color: 'var(--navy)', marginBottom: 16 }}><IconMail /></div>
           <h2 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', marginBottom: 10 }}>Check your email</h2>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
             We sent a confirmation link to <strong>{email}</strong>. Click the link to activate your account, then come back and sign in.

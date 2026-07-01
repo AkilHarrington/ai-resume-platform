@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
+import { IconWarning } from '../features/workspace/shared'
 
 interface Props {
   children: ReactNode
@@ -34,7 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
           boxShadow: 'var(--shadow-sm)', border: '1px solid var(--gray-100)',
           textAlign: 'center', marginTop: 16,
         }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+          <div style={{ display: 'flex', justifyContent: 'center', color: 'var(--warning)', marginBottom: 12 }}><IconWarning /></div>
           <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--navy)', marginBottom: 8 }}>
             {this.props.tabName ? `${this.props.tabName} ran into a problem` : 'Something went wrong'}
           </h3>

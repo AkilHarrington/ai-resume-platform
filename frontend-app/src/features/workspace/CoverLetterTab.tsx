@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button } from '../../components/Button'
-import { EmptyState, EmptyCard } from './shared'
+import { EmptyState, EmptyCard, IconDocument } from './shared'
 import { useAuth } from '../../app/AuthContext'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -52,7 +52,7 @@ export function CoverLetterTab({ result, isLoading, isStreaming, hasResume, comp
   if (!isStreaming && !result) return (
     <EmptyCard>
       <EmptyState
-        icon="📝"
+        icon={<IconDocument />}
         title="Cover Letter Generator"
         subtitle="Claude writes a tailored, professional cover letter based on your resume and the job description."
       />
@@ -72,7 +72,7 @@ export function CoverLetterTab({ result, isLoading, isStreaming, hasResume, comp
           }}
         />
         <Button fullWidth size="lg" variant="secondary" disabled={!hasResume} onClick={onRun}>
-          📝 Generate Cover Letter
+          Generate Cover Letter
         </Button>
         {error && <p style={{ color: 'var(--danger)', fontSize: 13, textAlign: 'center', marginTop: 8 }}>{error}</p>}
       </div>
@@ -96,10 +96,10 @@ export function CoverLetterTab({ result, isLoading, isStreaming, hasResume, comp
         <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)' }}>Your Cover Letter</h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Button size="sm" variant="outline" disabled={!!isStreaming || !result} onClick={() => navigator.clipboard.writeText(result)}>
-            📋 Copy
+            Copy
           </Button>
           <Button size="sm" variant="outline" disabled={!!isStreaming || isDownloading || !result} onClick={handleDownload}>
-            {isDownloading ? 'Saving…' : '⬇️ Download PDF'}
+            {isDownloading ? 'Saving…' : 'Download PDF'}
           </Button>
           {!isLoading && (
             <Button size="sm" variant="secondary" disabled={!!isStreaming} onClick={onRun}>Regenerate</Button>

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ScoreRing } from '../../components/ScoreRing'
 import { KeywordPill } from '../../components/KeywordPill'
-import { EmptyState } from './shared'
+import { EmptyState, IconBars, IconDocument, IconLock } from './shared'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import type { ScanResult } from '../../api/resumeApi'
 
@@ -148,7 +148,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
   if (!result) return (
     <>
       <EmptyState
-        icon="🎯"
+        icon={<IconBars />}
         title="Your ATS report will appear here"
         subtitle={hasResume ? 'Click "Run ATS Scan" to get your score.' : 'Upload or paste your resume to get started.'}
       />
@@ -161,7 +161,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
       background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 32,
       boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)', textAlign: 'center',
     }}>
-      <div style={{ fontSize: 40, marginBottom: 16 }}>📋</div>
+      <div style={{ display: 'flex', justifyContent: 'center', color: 'var(--text-muted)', marginBottom: 16 }}><IconDocument /></div>
       <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)', marginBottom: 10 }}>Add a Job Description to Get Your Score</h2>
       <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, maxWidth: 420, margin: '0 auto' }}>
         Paste the job description you're targeting in the left panel, then run the scan again.
@@ -183,7 +183,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
           borderRadius: 'var(--radius-lg)', padding: '12px 18px',
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
-          <span style={{ fontSize: 18 }}>✨</span>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', flexShrink: 0, display: 'inline-block' }} />
           <div>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>
               Your optimized resume scored {optimizedScore} during optimization.
@@ -241,7 +241,6 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
             pointerEvents: 'none',
           }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <span style={{ fontSize: 18 }}>👤</span>
             <span style={{ fontSize: 12, fontWeight: 700, color: scoreColor, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
               Senior Recruiter Analysis
             </span>
@@ -264,7 +263,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
           boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-input)',
           display: 'flex', alignItems: 'center', gap: 14,
         }}>
-          <span style={{ fontSize: 24 }}>🔒</span>
+          <div style={{ display: 'flex', color: 'var(--text-muted)' }}><IconLock /></div>
           <div>
             <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 2 }}>Senior Recruiter Analysis — Pro feature</p>
             <p style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Upgrade to see how a recruiter would evaluate your resume.</p>
@@ -336,7 +335,7 @@ export function ScanTab({ result, isLoading, hasResume, isPro, error, optimizedS
 
       {(result.strengths?.length > 0 || result.gaps?.length > 0) && !isPro && (
         <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)', textAlign: 'center' }}>
-          <div style={{ fontSize: 28, marginBottom: 8 }}>🔒</div>
+          <div style={{ display: 'flex', justifyContent: 'center', color: 'var(--text-muted)', marginBottom: 12 }}><IconLock /></div>
           <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 6 }}>Match Intelligence — Pro</h3>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
             Unlock your resume's strengths, skill gaps, and recruiter verdict with a Pro plan.

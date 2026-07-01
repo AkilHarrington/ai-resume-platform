@@ -57,8 +57,13 @@ function SummaryGenerator({ resumeText, targetRole }: ToolsTabProps) {
           width: 40, height: 40, borderRadius: 10,
           background: 'linear-gradient(135deg, #1A356E 0%, #2e57bc 100%)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 18, flexShrink: 0,
-        }}>✍️</div>
+          color: 'white', flexShrink: 0,
+        }}>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M3 17l7-7 5-5 2 2-5 5-7 7H3v-2z"/>
+            <path d="M13 5l2 2"/>
+          </svg>
+        </div>
         <div>
           <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)', margin: 0 }}>
             Professional Summary Generator
@@ -199,8 +204,12 @@ function BulletEnhancer({ targetRole }: { targetRole?: string }) {
           width: 40, height: 40, borderRadius: 10,
           background: 'linear-gradient(135deg, #1C3A2B 0%, #2d7a55 100%)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 18, flexShrink: 0,
-        }}>⚡</div>
+          color: 'white', flexShrink: 0,
+        }}>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M11 2L4 12h7l-2 6 9-10h-7l2-6z"/>
+          </svg>
+        </div>
         <div>
           <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)', margin: 0 }}>
             Bullet Point Enhancer

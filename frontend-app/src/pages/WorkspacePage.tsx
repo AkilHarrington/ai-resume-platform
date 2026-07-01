@@ -10,7 +10,7 @@ import { CoverLetterTab } from '../features/workspace/CoverLetterTab'
 import { LinkedInTab } from '../features/workspace/LinkedInTab'
 import { SummaryTab } from '../features/workspace/SummaryTab'
 import ToolsTab from '../features/workspace/ToolsTab'
-import { UpgradePrompt } from '../features/workspace/shared'
+import { UpgradePrompt, IconSun, IconMoon } from '../features/workspace/shared'
 import type { Tab } from '../features/workspace/shared'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useTheme } from '../app/ThemeContext'
@@ -336,7 +336,7 @@ export function WorkspacePage() {
           aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 7px', cursor: 'pointer', fontSize: 12, lineHeight: 1 }}
         >
-          {theme === 'dark' ? '☀️' : '🌙'}
+          {theme === 'dark' ? <IconSun /> : <IconMoon />}
         </button>
         <button
           onClick={() => { signOut(); navigate('/') }}

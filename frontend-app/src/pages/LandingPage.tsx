@@ -4,12 +4,13 @@ import { Button } from '../components/Button'
 import { useAuth } from '../app/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useTheme } from '../app/ThemeContext'
+import { IconBars, IconEdit, IconDocument, IconPerson, IconSun, IconMoon } from '../features/workspace/shared'
 
 const features = [
-  { icon: '🎯', title: 'Instant ATS Scan', desc: 'Get your ATS compatibility score in seconds. See exactly what keywords you\'re missing.' },
-  { icon: '✨', title: 'AI Optimization', desc: 'Claude rewrites your resume to maximize keyword alignment — without fabricating your experience.' },
-  { icon: '📝', title: 'Cover Letter Generator', desc: 'Generate a tailored, professional cover letter for any role in under 30 seconds.' },
-  { icon: '💼', title: 'LinkedIn Optimization', desc: 'Get an optimized headline and About section that attracts recruiters and passes searches.' },
+  { icon: <IconBars />, title: 'Instant ATS Scan', desc: 'Get your ATS compatibility score in seconds. See exactly what keywords you\'re missing.' },
+  { icon: <IconEdit />, title: 'AI Optimization', desc: 'Claude rewrites your resume to maximize keyword alignment — without fabricating your experience.' },
+  { icon: <IconDocument />, title: 'Cover Letter Generator', desc: 'Generate a tailored, professional cover letter for any role in under 30 seconds.' },
+  { icon: <IconPerson />, title: 'LinkedIn Optimization', desc: 'Get an optimized headline and About section that attracts recruiters and passes searches.' },
 ]
 
 const stats = [
@@ -70,7 +71,7 @@ export function LandingPage() {
               cursor: 'pointer', lineHeight: 1, transition: 'all var(--transition)',
             }}
           >
-            {theme === 'dark' ? '☀️' : '🌙'}
+            {theme === 'dark' ? <IconSun /> : <IconMoon />}
           </button>
           <Button variant="primary" size="sm" onClick={goToApp}>{isMobile ? 'Start Free' : 'Get Started Free'}</Button>
         </div>
@@ -160,7 +161,7 @@ export function LandingPage() {
                 background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: isMobile ? '24px 20px' : '32px 24px',
                 boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)',
               }}>
-                <div style={{ fontSize: 32, marginBottom: 14 }}>{f.icon}</div>
+                <div style={{ display: 'flex', color: 'var(--navy)', marginBottom: 14 }}>{f.icon}</div>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)', marginBottom: 8 }}>{f.title}</h3>
                 <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{f.desc}</p>
               </div>

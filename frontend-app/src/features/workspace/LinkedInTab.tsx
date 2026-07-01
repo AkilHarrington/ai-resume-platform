@@ -1,4 +1,4 @@
-import { EmptyState, EmptyCard } from './shared'
+import { EmptyState, EmptyCard, IconPerson } from './shared'
 
 interface Props {
   result: { headline: string; summary: string } | null
@@ -17,7 +17,7 @@ export function LinkedInTab({ result, isLoading, isStreaming, hasResume, targetR
   if (!isStreaming && !result) return (
     <EmptyCard>
       <EmptyState
-        icon="💼"
+        icon={<IconPerson />}
         title="LinkedIn Optimizer"
         subtitle="Get an optimized LinkedIn headline and About section that attracts recruiters and passes LinkedIn search algorithms."
       />
@@ -45,7 +45,7 @@ export function LinkedInTab({ result, isLoading, isStreaming, hasResume, targetR
             border: 'none', cursor: hasResume ? 'pointer' : 'not-allowed', transition: 'opacity 0.15s ease',
           }}
         >
-          💼 Optimize LinkedIn Profile
+          Optimize LinkedIn Profile
         </button>
         {error && <p style={{ color: 'var(--danger)', fontSize: 13, textAlign: 'center', marginTop: 8 }}>{error}</p>}
       </div>
@@ -110,7 +110,7 @@ export function LinkedInTab({ result, isLoading, isStreaming, hasResume, targetR
               border: '1px solid var(--border)', cursor: 'pointer', opacity: (!headlineReady || !!isStreaming) ? 0.5 : 1,
             }}
           >
-            📋 Copy
+            Copy
           </button>
         </div>
         <div style={{ background: 'var(--surface-1)', borderRadius: 'var(--radius)', padding: '14px 16px', minHeight: 48, display: 'flex', alignItems: 'center' }}>
@@ -152,7 +152,7 @@ export function LinkedInTab({ result, isLoading, isStreaming, hasResume, targetR
                 border: '1px solid var(--border)', cursor: 'pointer', opacity: (!summaryReady || !!isStreaming) ? 0.5 : 1,
               }}
             >
-              📋 Copy
+              Copy
             </button>
             {!isLoading && (
               <button

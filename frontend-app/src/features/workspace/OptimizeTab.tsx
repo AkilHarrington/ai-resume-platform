@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Button } from '../../components/Button'
 import { ScoreRing } from '../../components/ScoreRing'
-import { EmptyState, EmptyCard } from './shared'
+import { EmptyState, EmptyCard, IconEdit } from './shared'
 import { useToast } from '../../components/Toast'
 import { useAuth } from '../../app/AuthContext'
 import type { OptimizeResult } from '../../api/resumeApi'
@@ -405,9 +405,9 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
   // ── Empty state ───────────────────────────────────────────────────────────
   if (!result) return (
     <EmptyCard>
-      <EmptyState icon="✨" title="AI Resume Optimization" subtitle="Claude will rewrite your resume to maximize ATS keyword alignment without fabricating your experience." />
+      <EmptyState icon={<IconEdit />} title="AI Resume Optimization" subtitle="Claude will rewrite your resume to maximize ATS keyword alignment without fabricating your experience." />
       <Button fullWidth size="lg" variant="secondary" disabled={!hasResume} onClick={onRun} style={{ marginTop: 16 }}>
-        ✨ Optimize My Resume
+        Optimize My Resume
       </Button>
       {error && <p style={{ color: 'var(--danger)', fontSize: 13, textAlign: 'center', marginTop: 8 }}>{error}</p>}
     </EmptyCard>
@@ -472,7 +472,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
               ))}
               {bulletChanges > 0 && (
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-heading)', background: 'rgba(26,54,93,0.07)', border: '1px solid rgba(26,54,93,0.15)', borderRadius: 999, padding: '3px 10px' }}>
-                  ✏️ {bulletChanges} bullet{bulletChanges !== 1 ? 's' : ''} rewritten
+                  {bulletChanges} bullet{bulletChanges !== 1 ? 's' : ''} rewritten
                 </span>
               )}
             </div>
@@ -529,7 +529,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
               }
             }}
           >
-            📋 Copy to Clipboard
+            Copy
           </Button>
         </div>
       )}
@@ -565,7 +565,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
           )}
           {selectedTemplate === 'modern' && (
             <p style={{ fontSize: 11, color: 'var(--warning)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 4 }}>
-              ⚠ Two-column layouts may not parse correctly in some ATS systems. Use <button onClick={() => setSelectedTemplate('professional')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--navy)', fontWeight: 700, fontSize: 11, textDecoration: 'underline' }}>Professional</button> for guaranteed compatibility.
+              Two-column layouts may not parse correctly in some ATS systems. Use <button onClick={() => setSelectedTemplate('professional')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--navy)', fontWeight: 700, fontSize: 11, textDecoration: 'underline' }}>Professional</button> for guaranteed compatibility.
             </p>
           )}
           {(selectedTemplate !== 'professional' || selectedPalette !== 'monochrome') && selectedTemplate !== 'modern' && (
@@ -605,10 +605,10 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <Button size="md" variant="secondary" onClick={handleDownloadPDF} disabled={isDownloading} style={{ minWidth: 160 }}>
-              {isDownloading ? '⏳ Generating...' : '⬇️ Download PDF'}
+              {isDownloading ? 'Generating...' : 'Download PDF'}
             </Button>
             <Button size="md" variant="outline" onClick={handleDownloadDocx} disabled={isDownloadingDocx} style={{ minWidth: 160 }}>
-              {isDownloadingDocx ? '⏳ Generating...' : '📄 Download DOCX'}
+              {isDownloadingDocx ? 'Generating...' : 'Download DOCX'}
             </Button>
           </div>
         </div>
