@@ -85,7 +85,7 @@ export function IconWarning() {
   )
 }
 
-export type Tab = 'dashboard' | 'scan' | 'optimize' | 'cover-letter' | 'linkedin' | 'summary' | 'tools'
+export type Tab = 'dashboard' | 'scan' | 'optimize' | 'cover-letter' | 'linkedin' | 'interview' | 'summary' | 'tools'
 
 export function LoadingCard({ message }: { message: string }) {
   return (

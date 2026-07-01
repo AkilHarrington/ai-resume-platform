@@ -25,6 +25,7 @@ from models.cover_letter_models import CoverLetterRequest
 from models.linkedin_models import LinkedInRequest
 from models.tools_models import ProfessionalSummaryRequest, BulletEnhanceRequest, ResumeDocxRequest
 from models.preview_models import ResumePreviewRequest
+from models.interview_prep_models import InterviewPrepRequest
 from services.ats_service import calculate_ats_score
 from services.semantic_ats_service import semantic_ats_score
 from fastapi.responses import StreamingResponse
@@ -37,6 +38,7 @@ from services.resume_service import (
     generate_professional_summary,
     enhance_bullet_point,
     generate_preview_bullets,
+    stream_interview_prep,
 )
 from services.pdf_service import generate_resume_pdf, generate_cover_letter_pdf
 from services.docx_service import generate_resume_docx
@@ -870,6 +872,32 @@ def resume_preview_optimize(request: Request, data: ResumePreviewRequest, user: 
 
 
 # =========================================================
+# Interview Prep — streaming (async required for StreamingResponse)
+# Pro-only. 10 targeted questions with STAR coaching notes.
+# =========================================================
+
+@app.post("/api/resume/interview-prep")
+@limiter.limit("5/minute")
+async def resume_interview_prep(request: Request, data: InterviewPrepRequest, user: dict = Depends(require_pro)):
+    def generate():
+        try:
+            for chunk in stream_interview_prep(
+                data.resumeText,
+                data.jobDescription,
+                data.jobTitle,
+            ):
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            yield "data: [DONE]\n\n"
+        except AIUnavailableError as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# =========================================================
 # AI Tools — Professional Summary Generator (free, auth required)
 # sync def: runs in FastAPI's thread pool
 # =========================================================
@@ -941,6 +969,7 @@ _v1_routes = [
     ("/resume/upload",                    resume_upload,              ["POST"]),
     ("/resume/scan",                      resume_scan,                ["POST"]),
     ("/resume/preview-optimize",          resume_preview_optimize,    ["POST"]),
+    ("/resume/interview-prep",            resume_interview_prep,      ["POST"]),
     ("/resume/optimize/stream",           resume_optimize_stream,     ["POST"]),
     ("/cover-letter/generate",            cover_letter_generate,      ["POST"]),
     ("/cover-letter/stream",              cover_letter_stream,        ["POST"]),

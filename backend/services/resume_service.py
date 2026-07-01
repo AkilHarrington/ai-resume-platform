@@ -624,6 +624,89 @@ def check_fabricated_credentials(original_text: str, optimized_text: str) -> lis
 
 
 # =========================================================
+# Interview Prep — Claude Haiku (fast, cost-efficient)
+# Generates 10 targeted questions with STAR coaching notes.
+# =========================================================
+
+INTERVIEW_PREP_SYSTEM_PROMPT = """You are a senior executive recruiter and interview coach with 20 years of experience placing candidates at top companies.
+
+Your job is to generate exactly 10 targeted interview questions for a candidate based on their resume and the job description. Every question must be grounded in the specific gap between what this role requires and what this candidate's background shows.
+
+═══ QUESTION MIX ═══
+Generate exactly 10 questions in this order:
+- Questions 1-6: [Behavioral] — past behavior predicts future performance; use "Tell me about a time when..." or "Describe a situation where..." structure
+- Questions 7-9: [Situational] — role-specific scenarios this person would face in the target job
+- Question 10: [Values] — culture or work style fit for this type of organization
+
+═══ QUALITY RULES ═══
+- Every question must be specific to this resume + job description — never generic
+- Draw on specific gaps: skills, experience level, or responsibilities the JD requires but the resume does not clearly show
+- Behavioral questions must reference the candidate's actual background (job titles, industries, responsibilities)
+- Situational questions must reference actual challenges in the target role from the JD
+- Never generate: "Tell me about yourself", "What is your greatest weakness", "Where do you see yourself in 5 years"
+
+═══ OUTPUT FORMAT ═══
+For each question, output exactly:
+
+[number]. [Question text] [Category]
+STAR: [One specific coaching sentence telling the candidate exactly what to emphasize in their Situation, Task, Action, and Result for THIS role and THIS background]
+
+Use this exact format. No headers. No extra blank lines between the two fields within a question. One blank line between questions. Nothing before question 1. Nothing after question 10.
+
+Example:
+1. Tell me about a time you had to coordinate a complex project across multiple departments with competing deadlines. [Behavioral]
+STAR: Open with the specific teams involved and the stakes, detail the coordination system you built, emphasize what you personally drove vs. delegated, and close with a measurable outcome — timeline met, cost avoided, or stakeholder satisfaction."""
+
+
+def _build_interview_prep_user_message(
+    resume_text: str,
+    job_description: str = "",
+    job_title: str = "",
+) -> str:
+    """User message: dynamic data only. Instructions live in the cached system prompt."""
+    title_line = f"Target job title: {job_title}\n\n" if job_title else ""
+    jd_section = f"\n<job_description>\n{job_description}\n</job_description>" if job_description else ""
+    return f"""{title_line}<resume>
+{resume_text}
+</resume>{jd_section}"""
+
+
+def stream_interview_prep(
+    resume_text: str,
+    job_description: str = "",
+    job_title: str = "",
+):
+    """Generator: yields raw text chunks of 10 targeted interview questions with STAR coaching.
+
+    Uses Haiku for cost efficiency and speed. Cached system prompt cuts latency on warm hits.
+    """
+    user_message = _build_interview_prep_user_message(resume_text, job_description, job_title)
+    client = _get_client()
+    try:
+        with client.messages.stream(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2000,
+            temperature=0,
+            system=[{
+                "type": "text",
+                "text": INTERVIEW_PREP_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": user_message}],
+        ) as stream:
+            for text in stream.text_stream:
+                yield text
+    except anthropic.AuthenticationError:
+        raise AIUnavailableError("Invalid Anthropic API key. Check your ANTHROPIC_API_KEY.")
+    except anthropic.RateLimitError:
+        raise AIUnavailableError("Anthropic rate limit reached. Please wait a moment and try again.")
+    except anthropic.APIStatusError as e:
+        raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}). Please try again shortly.")
+    except anthropic.APIConnectionError:
+        raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
+
+
+# =========================================================
 # Preview bullets — Claude Haiku (cheap, ~$0.001/call)
 # Returns 3 optimized bullets for the blurred free-user preview.
 # Never raises — silent failure returns [].

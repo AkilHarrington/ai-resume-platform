@@ -8,6 +8,7 @@ import { ScanTab } from '../features/workspace/ScanTab'
 import { OptimizeTab } from '../features/workspace/OptimizeTab'
 import { CoverLetterTab } from '../features/workspace/CoverLetterTab'
 import { LinkedInTab } from '../features/workspace/LinkedInTab'
+import { InterviewPrepTab } from '../features/workspace/InterviewPrepTab'
 import { SummaryTab } from '../features/workspace/SummaryTab'
 import ToolsTab from '../features/workspace/ToolsTab'
 import { UpgradePrompt, IconSun, IconMoon } from '../features/workspace/shared'
@@ -16,7 +17,7 @@ import { useIsMobile } from '../hooks/useIsMobile'
 import { useTheme } from '../app/ThemeContext'
 import {
   uploadResume, scanResume, streamOptimize,
-  streamCoverLetter, streamLinkedIn, getProStatus,
+  streamCoverLetter, streamLinkedIn, streamInterviewPrep, getProStatus,
   type ScanResult, type OptimizeResult,
 } from '../api/resumeApi'
 
@@ -24,15 +25,16 @@ const MAX_RESUME_CHARS = 50_000
 const MAX_JD_CHARS    = 30_000
 
 const STEPS: { id: Tab; label: string; short: string }[] = [
-  { id: 'dashboard',    label: 'Upload',       short: 'Upload' },
-  { id: 'scan',         label: 'ATS Scan',     short: 'Scan'   },
-  { id: 'optimize',     label: 'Optimize',     short: 'Opt.'   },
-  { id: 'cover-letter', label: 'Cover Letter', short: 'Cover'  },
-  { id: 'linkedin',     label: 'LinkedIn',     short: 'LinkedIn' },
+  { id: 'dashboard',    label: 'Upload',         short: 'Upload'  },
+  { id: 'scan',         label: 'ATS Scan',       short: 'Scan'    },
+  { id: 'optimize',     label: 'Optimize',       short: 'Opt.'    },
+  { id: 'cover-letter', label: 'Cover Letter',   short: 'Cover'   },
+  { id: 'linkedin',     label: 'LinkedIn',       short: 'LinkedIn'},
+  { id: 'interview',    label: 'Interview Prep', short: 'Prep'    },
 ]
 
 const TAB_TO_STEP: Record<Tab, number> = {
-  'dashboard': 1, 'scan': 2, 'optimize': 3, 'cover-letter': 4, 'linkedin': 5, 'summary': 6, 'tools': 0,
+  'dashboard': 1, 'scan': 2, 'optimize': 3, 'cover-letter': 4, 'linkedin': 5, 'interview': 6, 'summary': 7, 'tools': 0,
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -68,6 +70,10 @@ export function WorkspacePage() {
   const [linkedin,             setLinkedin]             = useState<{ headline: string; summary: string } | null>(null)
   const [isStreamingLinkedIn,  setIsStreamingLinkedIn]  = useState(false)
   const [linkedinError,        setLinkedinError]        = useState('')
+
+  const [interviewResult,      setInterviewResult]      = useState('')
+  const [isStreamingInterview, setIsStreamingInterview] = useState(false)
+  const [interviewError,       setInterviewError]       = useState('')
 
   // ── Auth redirect ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -187,6 +193,19 @@ export function WorkspacePage() {
     )
   }, [resumeText, jobDescription, targetRole])
 
+  // ── Interview prep ────────────────────────────────────────────────────────
+  const runInterviewPrep = useCallback(async () => {
+    setInterviewResult('')
+    setInterviewError('')
+    setIsStreamingInterview(true)
+    await streamInterviewPrep(
+      { resumeText, jobDescription: jobDescription || undefined, jobTitle: targetRole || undefined },
+      (chunk) => setInterviewResult(prev => prev + chunk),
+      ()      => setIsStreamingInterview(false),
+      (msg)   => { setInterviewError(msg); setIsStreamingInterview(false) },
+    )
+  }, [resumeText, jobDescription, targetRole])
+
   const handleNewRole = useCallback(() => {
     setJobDescription('')
     setScanResult(null)
@@ -194,6 +213,9 @@ export function WorkspacePage() {
     setOptimizedScore(null)
     setCoverLetter('')
     setLinkedin(null)
+    setInterviewResult('')
+    setIsStreamingInterview(false)
+    setInterviewError('')
     setStreamingOptimize('')
     setOptimizeStatus('')
     setIsOptimizing(false)
@@ -216,6 +238,7 @@ export function WorkspacePage() {
     3: !!optimizeResult,
     4: !!coverLetter,
     5: !!linkedin,
+    6: !!interviewResult,
   }
 
   // ── Next banner config ────────────────────────────────────────────────────
@@ -271,7 +294,16 @@ export function WorkspacePage() {
         if (!isPro) return { msg: 'LinkedIn Optimizer is a Pro feature', btn: 'Upgrade to Pro →', action: () => navigate('/pricing'), disabled: false }
         return { msg: 'AI crafts a keyword-rich headline and About section', btn: 'Optimize LinkedIn', action: runLinkedIn, disabled: false }
       }
-      return { msg: 'Your complete package is ready — resume, cover letter, and LinkedIn all set', btn: 'View package →', action: () => setActiveTab('summary'), disabled: false }
+      return { msg: 'LinkedIn ready — prep for your interviews next', btn: 'Prep for Interview →', action: () => { setActiveTab('interview'); if (!interviewResult && !isStreamingInterview) runInterviewPrep() }, disabled: false }
+    }
+
+    if (currentStep === 6) {
+      if (isStreamingInterview) return { msg: 'Generating your interview questions…', btn: null, action: null, disabled: true }
+      if (!interviewResult) {
+        if (!isPro) return { msg: 'Interview Prep is a Pro feature', btn: 'Upgrade to Pro →', action: () => navigate('/pricing'), disabled: false }
+        return { msg: 'AI generates 10 targeted questions with STAR coaching notes', btn: 'Generate Questions', action: runInterviewPrep, disabled: false }
+      }
+      return { msg: 'Your complete package is ready — resume, cover letter, LinkedIn, and interview prep all set', btn: 'View package →', action: () => setActiveTab('summary'), disabled: false }
     }
 
     return { msg: null, btn: null, action: null, disabled: true }
@@ -495,6 +527,25 @@ export function WorkspacePage() {
               : <UpgradePrompt
                   feature="LinkedIn Optimizer"
                   description="Claude crafts a keyword-rich headline and summary optimized for your target role."
+                />
+          )}
+
+          {/* Step 6: Interview Prep */}
+          {activeTab === 'interview' && (
+            isPro
+              ? <ErrorBoundary tabName="Interview Prep">
+                  <InterviewPrepTab
+                    result={interviewResult}
+                    isLoading={isStreamingInterview && !interviewResult}
+                    isStreaming={isStreamingInterview}
+                    hasResume={!!resumeText}
+                    onRun={runInterviewPrep}
+                    error={interviewError}
+                  />
+                </ErrorBoundary>
+              : <UpgradePrompt
+                  feature="Interview Prep"
+                  description="Claude generates 10 targeted interview questions with STAR coaching notes, based on your resume and job description."
                 />
           )}
 

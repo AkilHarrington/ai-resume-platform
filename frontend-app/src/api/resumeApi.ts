@@ -282,6 +282,15 @@ export function streamLinkedIn(
   return readSSEStream('/api/v1/linkedin/stream', params, onChunk, onDone, onError)
 }
 
+export function streamInterviewPrep(
+  params: { resumeText: string; jobDescription?: string; jobTitle?: string },
+  onChunk: (chunk: string) => void,
+  onDone: () => void,
+  onError: (msg: string) => void,
+): Promise<void> {
+  return readSSEStream('/api/v1/resume/interview-prep', params, onChunk, onDone, onError)
+}
+
 // ─── AI Tools ────────────────────────────────────────────────────────────────
 
 export async function generateProfessionalSummary(params: {
