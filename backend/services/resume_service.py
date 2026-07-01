@@ -6,6 +6,7 @@
 
 import logging
 import os
+import re
 
 import httpx
 import anthropic
@@ -202,11 +203,13 @@ def stream_resume_optimization(
     # Pure-code keyword intelligence — no AI, no network cost beyond one Supabase read
     from services.keyword_intelligence_service import (
         extract_job_category,
+        extract_seniority_level,
         get_role_keywords,
         build_keyword_signal_block,
     )
     job_category = extract_job_category(job_description)
-    role_keywords = get_role_keywords(job_category)
+    seniority_level = extract_seniority_level(job_description)
+    role_keywords = get_role_keywords(job_category, seniority_level=seniority_level)
     keyword_signal = build_keyword_signal_block(role_keywords, job_category)
 
     user_message = _build_optimizer_user_message(
@@ -529,6 +532,59 @@ Improved bullet:"""
     except Exception as e:
         logger.error("enhance_bullet_point unexpected error: %s: %s", type(e).__name__, e)
         raise AIUnavailableError("Bullet enhancement encountered an unexpected error.")
+
+
+# =========================================================
+# Post-optimization hallucination check
+# =========================================================
+
+# Credential patterns that Claude should never introduce from thin air.
+# Regex matches common degrees, certifications, and named programs that
+# are fabricated if absent from the original resume.
+_CREDENTIAL_PATTERNS = [
+    # Degrees
+    r"\b(MBA|MPA|MS|BS|BA|BBA|MFA|MEd|MPH|MSW|JD|PhD|MD|DO|DrPH)\b",
+    # Professional certifications
+    r"\b(PMP|CAPM|PMI-ACP|CSM|CSPO|CPA|CFA|CFP|CMA|SHRM-CP|SHRM-SCP|PHR|SPHR|"
+    r"CISSP|CISM|CEH|CISA|AWS Certified|GCP Certified|Azure Certified|"
+    r"Six Sigma|Lean Six Sigma|Black Belt|Green Belt|ITIL|PRINCE2|"
+    r"Salesforce Certified|HubSpot Certified|Google Analytics Certified|"
+    r"Facebook Blueprint|Hootsuite|Marketo Certified)\b",
+]
+
+_COMPILED_CREDENTIALS = [re.compile(p, re.IGNORECASE) for p in _CREDENTIAL_PATTERNS]
+
+
+def check_fabricated_credentials(original_text: str, optimized_text: str) -> list[str]:
+    """
+    Detect credential tokens that appear in the optimized resume but not the original.
+
+    Returns a list of suspicious tokens (empty list = clean).
+    This is a lightweight post-optimization guard — it catches common fabrication
+    patterns without requiring an additional Claude call.
+
+    Research basis: 2026 hallucination literature (Lakera, Zep) recommends
+    layered grounding: prompt instruction + runtime output verification.
+    This function is the verification layer.
+
+    Limitations:
+    - Regex-based; will miss creative rephrasing of credentials
+    - Will not catch fabricated company names or dates
+    - False positives possible if original has poor OCR quality
+    Use result for logging/warning only — never as a hard block.
+    """
+    import re as _re
+
+    original_lower = original_text.lower()
+    suspicious: list[str] = []
+
+    for pattern in _COMPILED_CREDENTIALS:
+        original_matches = {m.group().lower() for m in pattern.finditer(original_text)}
+        optimized_matches = {m.group().lower() for m in pattern.finditer(optimized_text)}
+        new_in_optimized = optimized_matches - original_matches
+        suspicious.extend(new_in_optimized)
+
+    return suspicious
 
 
 def _parse_linkedin_text(text: str) -> dict:

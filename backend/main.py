@@ -383,7 +383,7 @@ def resume_scan(request: Request, data: ResumeScanRequest, user: dict = Depends(
     missing = ats.get("missing_keywords", [])
     score = ats.get("ats_score", 0)
 
-    from services.keyword_intelligence_service import extract_job_category
+    from services.keyword_intelligence_service import extract_job_category, extract_seniority_level
     log_scan_result(
         user_id=user["id"],
         scan_type="scan",
@@ -393,6 +393,7 @@ def resume_scan(request: Request, data: ResumeScanRequest, user: dict = Depends(
         matched_keywords=matched,
         semantic=ats.get("semantic", False),
         job_category=extract_job_category(job_description),
+        seniority_level=extract_seniority_level(job_description),
     )
 
     return {
@@ -507,7 +508,20 @@ async def resume_optimize_stream(request: Request, data: ResumeOptimizeRequest, 
 
             show_guidance = improved_score <= original_score
 
-            from services.keyword_intelligence_service import extract_job_category
+            from services.keyword_intelligence_service import extract_job_category, extract_seniority_level
+            from services.resume_service import check_fabricated_credentials
+
+            # ── Hallucination check ───────────────────────────────────────────
+            # Detect credentials that appear in optimized text but not original.
+            # Logs a warning for monitoring — does not block the user response.
+            suspicious_credentials = check_fabricated_credentials(data.resumeText, optimized_text)
+            if suspicious_credentials:
+                logger.warning(
+                    "hallucination_check: user=%s possible fabricated credentials in "
+                    "optimized resume: %s",
+                    user["id"], suspicious_credentials[:5],
+                )
+
             log_scan_result(
                 user_id=user["id"],
                 scan_type="optimize",
@@ -517,6 +531,7 @@ async def resume_optimize_stream(request: Request, data: ResumeOptimizeRequest, 
                 matched_keywords=improved_ats.get("matched_keywords", []),
                 semantic=True,
                 job_category=extract_job_category(job_description),
+                seniority_level=extract_seniority_level(job_description),
             )
 
             # ── Step 5: final result event ────────────────────────────────────

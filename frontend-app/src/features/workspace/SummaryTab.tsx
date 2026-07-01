@@ -37,6 +37,7 @@ export function SummaryTab({
   const [downloadingResume, setDownloadingResume] = useState(false)
   const [downloadingCover, setDownloadingCover] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
+  const [feedbackGiven, setFeedbackGiven] = useState<'yes' | 'no' | null>(null)
 
   const beforeScore = scanResult?.overallScore ?? null
   const afterScore = optimizedScore
@@ -361,6 +362,51 @@ export function SummaryTab({
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ── Outcome feedback ── */}
+      <div style={{
+        background: 'var(--surface-1)', border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-lg)', padding: '18px 20px',
+      }}>
+        {feedbackGiven === null ? (
+          <>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>
+              Did you hear back from this application?
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.5 }}>
+              Optional — helps us improve results for everyone in similar roles.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setFeedbackGiven('yes')}
+                style={{
+                  background: 'var(--success-light)', color: 'var(--success)',
+                  border: '1px solid var(--success)', borderRadius: 'var(--radius)',
+                  padding: '7px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                }}
+              >
+                Yes, I got a response
+              </button>
+              <button
+                onClick={() => setFeedbackGiven('no')}
+                style={{
+                  background: 'var(--surface-0)', color: 'var(--text-secondary)',
+                  border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+                  padding: '7px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Not yet / No
+              </button>
+            </div>
+          </>
+        ) : (
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
+            {feedbackGiven === 'yes'
+              ? 'That\'s great — congratulations! We\'ll use this to improve results for similar roles.'
+              : 'Thanks for letting us know. We\'ll keep refining the optimization for this role type.'}
+          </p>
+        )}
       </div>
 
       {/* ── New role CTA ── */}

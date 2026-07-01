@@ -203,29 +203,67 @@ def log_scan_result(
     matched_keywords: list[str],
     semantic: bool = True,
     job_category: str = "",
+    seniority_level: str = "",
 ) -> None:
-    """Log a scan or optimize result for analytics. Fails silently — never blocks the user."""
+    """
+    Log a scan or optimize result for analytics. Fails silently — never blocks the user.
+
+    Gaming protection applied before insert:
+    - Keywords with suspiciously long strings (>50 chars) are stripped — these
+      are likely prompt injection attempts or data quality issues.
+    - keyword lists capped at 50 entries — legitimate ATS lists rarely exceed 30.
+    - score_improvement is computed server-side, not trusted from caller.
+
+    seniority_level: one of 'entry', 'mid', 'senior', 'executive', or '' (unclassified).
+    Stored for future segmented keyword intelligence queries.
+    Requires seniority_level column in scan_results (see SQL migration note).
+    """
     try:
-        httpx.post(
+        # ── Gaming / data quality validation ────────────────────────────────
+        clean_missing = [
+            kw for kw in (missing_keywords or [])
+            if isinstance(kw, str) and 0 < len(kw.strip()) <= 50
+        ][:50]
+        clean_matched = [
+            kw for kw in (matched_keywords or [])
+            if isinstance(kw, str) and 0 < len(kw.strip()) <= 50
+        ][:50]
+
+        score_improvement = after_score - before_score
+
+        payload: dict = {
+            "user_id": user_id or None,
+            "scan_type": scan_type,
+            "job_category": job_category or None,
+            "before_score": before_score,
+            "after_score": after_score,
+            "score_improvement": score_improvement,
+            "missing_keywords": clean_missing,
+            "matched_keywords": clean_matched,
+            "keyword_count_missing": len(clean_missing),
+            "keyword_count_matched": len(clean_matched),
+            "semantic": semantic,
+        }
+
+        # seniority_level requires a DB column — include only when set so
+        # the insert doesn't fail if the column hasn't been added yet.
+        # Run SQL migration: ALTER TABLE scan_results ADD COLUMN seniority_level text DEFAULT '';
+        if seniority_level:
+            payload["seniority_level"] = seniority_level
+
+        resp = httpx.post(
             _db_url("scan_results"),
             headers=_db_headers(),
-            json={
-                "user_id": user_id or None,
-                "scan_type": scan_type,
-                "job_category": job_category or None,
-                "before_score": before_score,
-                "after_score": after_score,
-                "score_improvement": after_score - before_score,
-                "missing_keywords": missing_keywords,
-                "matched_keywords": matched_keywords,
-                "keyword_count_missing": len(missing_keywords),
-                "keyword_count_matched": len(matched_keywords),
-                "semantic": semantic,
-            },
+            json=payload,
             timeout=10,
         )
+        if resp.status_code not in (200, 201):
+            logger.warning(
+                "log_scan_result: unexpected status %s — %s",
+                resp.status_code, resp.text[:200],
+            )
     except Exception as e:
-        logger.warning("log_scan_result failed (non-blocking): %s", type(e).__name__)
+        logger.warning("log_scan_result failed (non-blocking): %s: %s", type(e).__name__, e)
 
 
 # =========================================================
