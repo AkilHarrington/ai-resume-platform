@@ -26,7 +26,7 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
 | **JD** | Job description (pasted by user for ATS scan) |
 | **semantic scan** | ATS scan using Claude — requires API credits |
 
-## Current State (after session 16 — production deployment + all critical bugs fixed)
+## Current State (after session 18 — 2026 audit complete + keep-warm deployed)
 
 ### ✅ Done
 - Claude semantic ATS scorer — 6 dimensions (Human Readability 5%, Keyword Alignment 30%)
@@ -82,7 +82,7 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
   - TypeScript clean (0 errors) after full migration
 
 - **Production deployment (session 16) — fully live on Render + Vercel**:
-  - **Backend**: Render (auto-deploy from `main` branch) — `https://ai-resume-platform.onrender.com` (or similar)
+  - **Backend**: Render (auto-deploy from `main` branch) — `https://ai-resume-studio-api.onrender.com`
   - **Frontend**: Vercel — `https://ai-resume-platform-hazel.vercel.app`
   - **PostgREST 401 fix**: Removed hand-rolled HS256 JWT in `supabase_service.py`; now uses real `sb_secret_*` key on `apikey` header only (Supabase gateway translates internally). Added user-JWT + anon-key path for pro-status reads (most reliable path)
   - **CORS fix**: `allow_origin_regex=r"https://ai-resume-platform[a-zA-Z0-9\-]*\.vercel\.app"` in CORSMiddleware — covers all Vercel preview URLs
@@ -102,6 +102,22 @@ Akil Harrington, founder of AI Resume Studio. Non-technical. Building an AI-powe
   - JD drawer removed — JD textarea lives inline on Step 1
   - Mobile: step number bar at bottom replaces old icon tab bar
   - 0 TypeScript errors
+
+- **2026 audit — all 9 service fixes deployed** (session 18):
+  - `pdf_service.py`: EMERALD NameError fixed
+  - `models/tools_models.py`: Pydantic Field constraints added
+  - `semantic_ats_service.py`: Anthropic tool use for guaranteed JSON + prompt caching (`cache_control: ephemeral`)
+  - `resume_parser.py`: phone extraction, fuzzy heading matching, location parsing
+  - `supabase_service.py`: httpx connection pool singleton (eliminates per-request TLS handshake)
+  - `resume_service.py`: system/user prompt split on all 6 Claude call sites + prompt caching
+  - `ats_service.py`: NLTK SnowballStemmer (graceful fallback), 13-industry expansion, score fix for two-generic match
+  - `match_intelligence.py`: word-boundary regex (`\b`) replacing bare `in` check
+  - `exceptions.py`: typed subclasses (`AIRateLimitError`, `AIAuthError`, `AIConnectionError`, `AITimeoutError`)
+  - `requirements.txt`: `nltk>=3.9.0` added
+- **Keep-warm endpoint**: `GET /ping` → `{"ok": true}` — ultra-lightweight, no DB calls
+- **UptimeRobot**: HTTP monitor pinging `/ping` every 5 minutes — prevents Render free-tier cold starts
+- **Correct Render backend URL**: `https://ai-resume-studio-api.onrender.com` (not `ai-resume-platform`)
+- **Google sign-in**: added to LoginPage + SignupPage (UI wired; requires Google Cloud Console + Supabase provider setup to activate)
 
 ### 🔲 Next session
 1. **Message 20 personal contacts** — offer free resume scans (first users / beta feedback) — platform is fully live
@@ -185,5 +201,5 @@ stripe listen --forward-to localhost:8000/api/payments/webhook
 | `frontend-app/src/pages/TermsPage.tsx` | /terms route |
 
 ## Project Rating
-**Current: 9.5/10** — fully deployed and working end-to-end. Auth, pro-status, Stripe checkout + webhook, PDF downloads, all AI features confirmed live. Supabase RLS + grants fixed. Zero known production bugs.
-Gap to 10: post-launch API versioning + Zod validation (deferred by design).
+**Current: 9.5/10** — fully deployed and working end-to-end. Auth, pro-status, Stripe checkout + webhook, PDF downloads, all AI features confirmed live. Supabase RLS + grants fixed. 2026 audit complete. UptimeRobot keep-warm active. Zero known production bugs.
+Gap to 10: post-launch API versioning + Zod validation (deferred by design). Google sign-in pending Cloud Console setup.
