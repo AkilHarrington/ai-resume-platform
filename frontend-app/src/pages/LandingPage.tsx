@@ -127,7 +127,7 @@ export function LandingPage() {
           </div>
 
           <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, marginTop: 20 }}>
-            No account required · Free ATS scan · Upgrade anytime
+            Free account · Free ATS scan · Upgrade anytime
           </p>
         </div>
       </section>
@@ -229,7 +229,7 @@ export function LandingPage() {
           Ready to get more interviews?
         </h2>
         <p style={{ color: 'rgba(255,255,255,0.8)', marginBottom: 28, fontSize: 15 }}>
-          Scan your resume for free — no account required.
+          Create a free account and scan your resume in minutes.
         </p>
         <Button size="lg" variant="secondary" onClick={goToApp}
           style={{ background: 'white', color: 'var(--emerald)', borderColor: 'white', fontSize: 16, padding: '14px 36px' }}>
