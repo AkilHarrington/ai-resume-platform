@@ -437,25 +437,23 @@ export function WorkspacePage() {
             </ErrorBoundary>
           )}
 
-          {/* Step 3: Optimize */}
+          {/* Step 3: Optimize — always rendered; OptimizeTab handles free/pro internally */}
           {activeTab === 'optimize' && (
-            isPro
-              ? <ErrorBoundary tabName="Resume Optimizer">
-                  <OptimizeTab
-                    result={optimizeResult}
-                    isLoading={isOptimizing}
-                    hasResume={!!resumeText}
-                    onRun={runOptimize}
-                    error={optimizeError}
-                    streamingText={streamingOptimize}
-                    statusMessage={optimizeStatus}
-                    originalScore={scanResult?.overallScore ?? undefined}
-                  />
-                </ErrorBoundary>
-              : <UpgradePrompt
-                  feature="Resume Optimizer"
-                  description="Claude rewrites your resume to maximize ATS alignment with your target job description."
-                />
+            <ErrorBoundary tabName="Resume Optimizer">
+              <OptimizeTab
+                result={optimizeResult}
+                isLoading={isOptimizing}
+                hasResume={!!resumeText}
+                onRun={runOptimize}
+                error={optimizeError}
+                streamingText={streamingOptimize}
+                statusMessage={optimizeStatus}
+                originalScore={scanResult?.overallScore ?? undefined}
+                isPro={isPro}
+                resumeText={resumeText}
+                jobDescription={jobDescription}
+              />
+            </ErrorBoundary>
           )}
 
           {/* Step 4: Cover Letter */}

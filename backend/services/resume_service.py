@@ -623,6 +623,67 @@ def check_fabricated_credentials(original_text: str, optimized_text: str) -> lis
     return suspicious
 
 
+# =========================================================
+# Preview bullets — Claude Haiku (cheap, ~$0.001/call)
+# Returns 3 optimized bullets for the blurred free-user preview.
+# Never raises — silent failure returns [].
+# =========================================================
+
+PREVIEW_SYSTEM_PROMPT = """You are an expert resume writer.
+
+Rewrite the first 3 experience bullets from the resume to better match the job description.
+
+Rules:
+- Return EXACTLY 3 bullets, one per line
+- Each line must start with a • character
+- Make each bullet stronger, more specific, and keyword-aligned to the job description
+- Never invent employers, job titles, degrees, certifications, or metrics not in the original resume
+- Never use these phrases: spearheaded, leveraged, synergistic, results-driven, detail-oriented, team player
+- Return ONLY the 3 bullet lines — no headers, no labels, no explanations, nothing else"""
+
+
+def generate_preview_bullets(resume_text: str, job_description: str) -> list[str]:
+    """Generate 3 optimized experience bullets for the blurred free-user preview.
+
+    Uses Haiku for cost efficiency (~$0.001/call).
+    Silently returns [] on any failure — never raises to the caller.
+    """
+    if not resume_text.strip():
+        return []
+
+    user_message = f"""<resume>
+{resume_text}
+</resume>
+
+<job_description>
+{job_description or "No job description provided — optimize for general career advancement."}
+</job_description>"""
+
+    client = _get_client()
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=400,
+            temperature=0,
+            system=[{
+                "type": "text",
+                "text": PREVIEW_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": user_message}],
+        )
+        text = response.content[0].text.strip()
+        bullets = [
+            line.strip().lstrip("•–—-· ").strip()
+            for line in text.splitlines()
+            if line.strip() and line.strip()[0] in ("•", "–", "—", "-")
+        ]
+        return bullets[:3]
+    except Exception as e:
+        logger.warning("generate_preview_bullets failed silently: %s: %s", type(e).__name__, e)
+        return []
+
+
 def _parse_linkedin_text(text: str) -> dict:
     if "HEADLINE:" in text and "SUMMARY:" in text:
         summary_idx = text.index("SUMMARY:")

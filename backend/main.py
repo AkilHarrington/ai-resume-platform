@@ -24,6 +24,7 @@ from models.scan_models import ResumeScanRequest
 from models.cover_letter_models import CoverLetterRequest
 from models.linkedin_models import LinkedInRequest
 from models.tools_models import ProfessionalSummaryRequest, BulletEnhanceRequest, ResumeDocxRequest
+from models.preview_models import ResumePreviewRequest
 from services.ats_service import calculate_ats_score
 from services.semantic_ats_service import semantic_ats_score
 from fastapi.responses import StreamingResponse
@@ -35,6 +36,7 @@ from services.resume_service import (
     stream_linkedin_optimization,
     generate_professional_summary,
     enhance_bullet_point,
+    generate_preview_bullets,
 )
 from services.pdf_service import generate_resume_pdf, generate_cover_letter_pdf
 from services.docx_service import generate_resume_docx
@@ -848,6 +850,26 @@ async def stripe_webhook(request: Request):
 
 
 # =========================================================
+# Preview Optimize — free teaser for conversion (auth required, NOT pro-gated)
+# Returns 3 optimized bullets for the blurred preview shown to free users.
+# sync def: runs in FastAPI's thread pool
+# =========================================================
+
+@app.post("/api/resume/preview-optimize")
+@limiter.limit("5/minute")
+def resume_preview_optimize(request: Request, data: ResumePreviewRequest, user: dict = Depends(get_current_user)):
+    """Generate 3 preview bullets for the blurred free-user teaser.
+
+    Auth required but NOT pro-gated — this is the conversion feature.
+    On any failure returns {"bullets": []} so the frontend degrades gracefully.
+    """
+    if not data.resumeText.strip():
+        return {"bullets": []}
+    bullets = generate_preview_bullets(data.resumeText, data.jobDescription or "")
+    return {"bullets": bullets}
+
+
+# =========================================================
 # AI Tools — Professional Summary Generator (free, auth required)
 # sync def: runs in FastAPI's thread pool
 # =========================================================
@@ -918,6 +940,7 @@ def resume_download_docx(request: Request, data: ResumeDocxRequest, user: dict =
 _v1_routes = [
     ("/resume/upload",                    resume_upload,              ["POST"]),
     ("/resume/scan",                      resume_scan,                ["POST"]),
+    ("/resume/preview-optimize",          resume_preview_optimize,    ["POST"]),
     ("/resume/optimize/stream",           resume_optimize_stream,     ["POST"]),
     ("/cover-letter/generate",            cover_letter_generate,      ["POST"]),
     ("/cover-letter/stream",              cover_letter_stream,        ["POST"]),

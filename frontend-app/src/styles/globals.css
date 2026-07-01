@@ -160,3 +160,23 @@ a:focus-visible,
 
 .fade-in  { animation: fadeIn 0.3s ease forwards; }
 .slide-in { animation: slideInRight 0.3s ease forwards; }
+
+/* ── Blurred preview — paywall teaser ───────────────────────────────────────── */
+.preview-blurred {
+  filter: blur(4px);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* ── Screen reader only — visually hidden, accessible ───────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

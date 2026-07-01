@@ -322,6 +322,19 @@ export async function downloadResumeDocx(params: {
   return response.blob()
 }
 
+export async function previewOptimize(params: {
+  resumeText: string
+  jobDescription?: string
+}): Promise<{ bullets: string[] }> {
+  try {
+    const { data } = await api.post<{ bullets: string[] }>('/api/v1/resume/preview-optimize', params)
+    return data
+  } catch {
+    // Silent failure — blurred preview is non-critical
+    return { bullets: [] }
+  }
+}
+
 export async function createCheckoutSession(plan: 'monthly' | 'onetime'): Promise<{ url: string }> {
   const { data } = await api.post<{ url: string }>(`/api/v1/payments/create-checkout-session?plan=${plan}`)
   return data

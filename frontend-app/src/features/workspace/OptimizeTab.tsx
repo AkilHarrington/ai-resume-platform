@@ -1,11 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '../../components/Button'
 import { ScoreRing } from '../../components/ScoreRing'
-import { EmptyState, EmptyCard, IconEdit } from './shared'
+import { EmptyState, EmptyCard, IconEdit, UpgradePrompt } from './shared'
 import { useToast } from '../../components/Toast'
 import { useAuth } from '../../app/AuthContext'
 import type { OptimizeResult } from '../../api/resumeApi'
-import { downloadResumeDocx } from '../../api/resumeApi'
+import { downloadResumeDocx, previewOptimize } from '../../api/resumeApi'
 import type { ResumeTemplate } from '../../types/resumeTemplate'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -306,9 +306,12 @@ interface Props {
   streamingText?: string
   statusMessage?: string
   originalScore?: number
+  isPro?: boolean
+  resumeText?: string
+  jobDescription?: string
 }
 
-export function OptimizeTab({ result, isLoading, hasResume, onRun, error, streamingText, statusMessage, originalScore }: Props) {
+export function OptimizeTab({ result, isLoading, hasResume, onRun, error, streamingText, statusMessage, originalScore, isPro, resumeText, jobDescription }: Props) {
   const { showToast } = useToast()
   const { session } = useAuth()
   const [view, setView] = useState<'optimized' | 'original' | 'changes'>('optimized')
@@ -316,6 +319,22 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
   const [selectedPalette, setSelectedPalette] = useState<ResumePalette>('blue')
   const [isDownloading, setIsDownloading] = useState(false)
   const [isDownloadingDocx, setIsDownloadingDocx] = useState(false)
+
+  // ── Blurred preview for free users ───────────────────────────────────────
+  const [previewBullets, setPreviewBullets] = useState<string[]>([])
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const previewFired = useRef(false)
+
+  useEffect(() => {
+    // Only fire once per mount, only for free users without a result yet
+    if (isPro || result || isLoading || !resumeText || previewFired.current) return
+    previewFired.current = true
+    setPreviewLoading(true)
+    previewOptimize({ resumeText, jobDescription })
+      .then(data => setPreviewBullets(data.bullets))
+      .catch(() => {})
+      .finally(() => setPreviewLoading(false))
+  }, [isPro, result, isLoading, resumeText, jobDescription])
 
   const addedKeywords = useMemo(() => {
     if (!result) return []
@@ -403,15 +422,79 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
   }
 
   // ── Empty state ───────────────────────────────────────────────────────────
-  if (!result) return (
-    <EmptyCard>
-      <EmptyState icon={<IconEdit />} title="AI Resume Optimization" subtitle="Claude will rewrite your resume to maximize ATS keyword alignment without fabricating your experience." />
-      <Button fullWidth size="lg" variant="secondary" disabled={!hasResume} onClick={onRun} style={{ marginTop: 16 }}>
-        Optimize My Resume
-      </Button>
-      {error && <p style={{ color: 'var(--danger)', fontSize: 13, textAlign: 'center', marginTop: 8 }}>{error}</p>}
-    </EmptyCard>
-  )
+  if (!result) {
+    // Free user — show blurred preview + upgrade CTA
+    if (!isPro) {
+      return (
+        <EmptyCard>
+          <EmptyState icon={<IconEdit />} title="AI Resume Optimization" subtitle="Claude rewrites every bullet to maximize your ATS score without fabricating your experience." />
+
+          {/* ── Blurred Preview ── */}
+          {(previewLoading || previewBullets.length > 0) && (
+            <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
+                Preview — your optimized bullets
+              </div>
+
+              {previewLoading ? (
+                /* Skeleton while Haiku generates */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {[90, 75, 85].map((w, i) => (
+                    <div key={i} style={{ height: 13, borderRadius: 4, width: `${w}%`, background: 'var(--surface-1)', animation: `pulse 1.5s ease-in-out ${i * 0.12}s infinite` }} />
+                  ))}
+                </div>
+              ) : (
+                <div style={{ position: 'relative' }}>
+                  {previewBullets.map((bullet, i) => (
+                    <div
+                      key={i}
+                      {...(i > 0 ? { 'aria-hidden': 'true' } : {})}
+                      className={i > 0 ? 'preview-blurred' : undefined}
+                      style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.75, marginBottom: 10, paddingLeft: 18, position: 'relative' }}
+                    >
+                      <span style={{ position: 'absolute', left: 0, color: 'var(--emerald)', fontWeight: 700 }}>•</span>
+                      {bullet}
+                    </div>
+                  ))}
+                  {/* Accessible description for screen readers */}
+                  <span className="sr-only">
+                    {previewBullets.length > 1
+                      ? `${previewBullets.length - 1} more optimized bullet${previewBullets.length - 1 !== 1 ? 's' : ''} — upgrade to Pro to see your full optimization`
+                      : 'Upgrade to Pro to see your full optimization'}
+                  </span>
+                  {/* Gradient fade into upgrade prompt */}
+                  <div style={{
+                    position: 'absolute', bottom: 0, left: 0, right: 0, height: 56,
+                    background: 'linear-gradient(to bottom, transparent, var(--surface-0))',
+                    pointerEvents: 'none',
+                  }} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Upgrade CTA ── */}
+          <div style={{ marginTop: previewBullets.length > 0 ? 8 : 16 }}>
+            <UpgradePrompt
+              feature="Resume Optimizer"
+              description="See your full optimization — every bullet rewritten, ATS score improved."
+            />
+          </div>
+        </EmptyCard>
+      )
+    }
+
+    // Pro user — standard empty state with run button
+    return (
+      <EmptyCard>
+        <EmptyState icon={<IconEdit />} title="AI Resume Optimization" subtitle="Claude will rewrite your resume to maximize ATS keyword alignment without fabricating your experience." />
+        <Button fullWidth size="lg" variant="secondary" disabled={!hasResume} onClick={onRun} style={{ marginTop: 16 }}>
+          Optimize My Resume
+        </Button>
+        {error && <p style={{ color: 'var(--danger)', fontSize: 13, textAlign: 'center', marginTop: 8 }}>{error}</p>}
+      </EmptyCard>
+    )
+  }
 
   // ── Results ───────────────────────────────────────────────────────────────
   const improved      = result.scoreImprovement > 0
