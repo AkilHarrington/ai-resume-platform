@@ -213,12 +213,15 @@ def get_current_user(request: Request) -> dict:
     return user
 
 
-def require_pro(user: dict = Depends(get_current_user)) -> dict:
+def require_pro(request: Request, user: dict = Depends(get_current_user)) -> dict:
     """Require auth + active Pro subscription. FORCE_PRO bypasses in dev."""
     if FORCE_PRO:
         return user
+    # Pass the user's JWT so the DB read uses RLS auth (same path as pro-status endpoint).
+    # Service-key-only path was blocked by RLS when Authorization header was absent.
+    raw_jwt = request.headers.get("Authorization", "").removeprefix("Bearer ").strip() or None
     try:
-        is_pro = get_user_pro_status(user["id"])
+        is_pro = get_user_pro_status(user["id"], user_jwt=raw_jwt)
     except Exception as e:
         # Supabase connectivity failure — don't silently demote paying users.
         # Return 503 so they know it's a service issue, not their account.
