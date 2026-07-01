@@ -443,11 +443,12 @@ def generate_professional_summary(
 Based on the resume below, write a 3-4 sentence professional summary for the top of the resume.
 
 Rules:
+- Write entirely in third person — use job title or noun phrase, NEVER the candidate's name
+- Every sentence must begin with a title or noun, not the candidate's name (WRONG: "John Smith has..." RIGHT: "An operations leader with...")
 - First sentence: professional identity + years of experience (e.g. "Operations Coordinator with 6 years...")
-- Second sentence: 1-2 specific, concrete achievements or areas of expertise from the resume
+- Second sentence: 1-2 specific, concrete achievements or areas of expertise drawn from the resume
 - Third sentence: value statement aligned to the target role — what the candidate brings
 - Optional fourth sentence only if it adds real information; otherwise stop at three
-- Third person phrasing ("Operations professional with..." not "I am...")
 - No hollow phrases: no "results-driven", "team player", "passionate about", "dynamic", "detail-oriented"
 - Sound like a human wrote it — varied sentence structure, specific language
 
@@ -495,8 +496,9 @@ Rewrite this resume bullet point to be stronger, more specific, and results-focu
 
 Rules:
 - Start with a strong action verb (past tense for previous roles, present for current)
-- Add specificity: scope, scale, result, timeframe, team size, or dollar amounts — only where the original implies it
-- Do NOT invent specific numbers, metrics, tools, or companies not present or implied in the original
+- Where the original implies a measurable result but gives no number, insert a bracketed placeholder: [X%], [X hrs/week], [$X], [team of X], etc. — so the user knows exactly where to add their real figure
+- Do NOT invent specific numbers, tools, or companies not present or implied in the original
+- Use placeholders generously — they are more useful than vague language
 - Maximum 1-2 lines — a bullet, not a paragraph
 - No hollow phrases: no "spearheaded", "leveraged", "synergistic", "results-driven", "team player"
 - Return only the improved bullet text — no label, no explanation, no asterisk, no dash prefix
