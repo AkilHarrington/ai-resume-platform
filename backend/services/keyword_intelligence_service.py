@@ -103,19 +103,22 @@ def get_role_keywords(job_category: str, limit: int = MAX_KEYWORDS) -> list[str]
         return []
 
     try:
-        from services.supabase_service import _get_client
-        client = _get_client()
+        import httpx
+        from services.supabase_service import _db_headers, _db_url
 
-        result = (
-            client.table("scan_results")
-            .select("missing_keywords, score_improvement")
-            .eq("job_category", job_category)
-            .eq("scan_type", "optimize")
-            .gt("score_improvement", 0)
-            .execute()
+        resp = httpx.get(
+            _db_url("scan_results"),
+            headers=_db_headers(),
+            params={
+                "select": "missing_keywords,score_improvement",
+                "job_category": f"eq.{job_category}",
+                "scan_type": "eq.optimize",
+                "score_improvement": "gt.0",
+            },
+            timeout=5,
         )
-
-        rows = result.data or []
+        resp.raise_for_status()
+        rows = resp.json() or []
 
         if len(rows) < MIN_SAMPLE_SIZE:
             logger.debug(
