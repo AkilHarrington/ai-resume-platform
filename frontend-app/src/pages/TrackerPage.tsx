@@ -13,7 +13,6 @@ import {
 // ─── Status config ────────────────────────────────────────────────────────────
 
 const STATUSES = ['saved', 'applied', 'screening', 'interview', 'offer', 'rejected', 'withdrawn'] as const
-type Status = typeof STATUSES[number]
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
   saved:     { bg: 'var(--surface-2)',         color: 'var(--text-muted)',      label: 'Saved'      },
