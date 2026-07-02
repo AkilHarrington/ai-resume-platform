@@ -42,6 +42,7 @@ export function SummaryTab({
   const beforeScore = scanResult?.overallScore ?? null
   const afterScore = optimizedScore
   const improvement = (beforeScore !== null && afterScore !== null) ? afterScore - beforeScore : null
+  const scoresEqual = beforeScore !== null && afterScore !== null && beforeScore === afterScore && beforeScore > 0
 
   const copy = async (text: string, key: string) => {
     try {
@@ -114,7 +115,7 @@ export function SummaryTab({
     }
   }
 
-  // Score metrics to show (filter out nulls)
+  // Score metrics — only used in the non-equal (improved) path
   const metrics = [
     beforeScore !== null && { label: 'ATS score before', value: String(beforeScore), color: 'var(--text-primary)' },
     afterScore !== null && { label: 'ATS score after', value: String(afterScore), color: 'var(--success)' },
@@ -151,7 +152,27 @@ export function SummaryTab({
         </p>
 
         {/* Score metrics */}
-        {metrics.length > 0 && (
+        {scoresEqual ? (
+          /* ATS Cleared — single card, no misleading before/after comparison */
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{
+              background: 'var(--surface-1)', borderRadius: 'var(--radius)',
+              padding: '12px 16px', minWidth: 110, flex: '1 1 110px',
+            }}>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 5px' }}>ATS score</p>
+              <p style={{ fontSize: 28, fontWeight: 800, color: 'var(--success)', margin: 0, lineHeight: 1 }}>{afterScore}</p>
+            </div>
+            <div style={{
+              background: 'var(--success-light)', borderRadius: 'var(--radius)',
+              padding: '12px 16px', minWidth: 110, flex: '1 1 110px',
+              border: '1px solid var(--success)',
+              display: 'flex', flexDirection: 'column', justifyContent: 'center',
+            }}>
+              <p style={{ fontSize: 11, color: 'var(--success)', fontWeight: 700, margin: '0 0 3px' }}>✓ ATS Cleared</p>
+              <p style={{ fontSize: 12, color: 'var(--success)', margin: 0, lineHeight: 1.4 }}>Refined for human reviewers</p>
+            </div>
+          </div>
+        ) : metrics.length > 0 && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {metrics.map(m => (
               <div key={m.label} style={{
