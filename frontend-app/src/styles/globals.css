@@ -33,6 +33,12 @@
   --success:       #047857;
   --success-light: #D1FAE5;
 
+  /* Diff view (Changes tab) */
+  --diff-add-bg:      #ECFDF5;
+  --diff-add-text:    #065F46;
+  --diff-remove-bg:   #FEF2F2;
+  --diff-remove-text: #991B1B;
+
   /* Typography & layout */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --radius-sm: 6px;
@@ -102,6 +108,12 @@
   --success-light: rgba(63,185,80,0.12);
   --warning-light: rgba(210,153,34,0.12);
   --danger-light:  rgba(248,81,73,0.12);
+
+  /* Diff view (Changes tab) — dark mode */
+  --diff-add-bg:      rgba(46,160,67,0.15);
+  --diff-add-text:    #56D364;
+  --diff-remove-bg:   rgba(248,81,73,0.15);
+  --diff-remove-text: #FF7B72;
 
   /* Heavier shadows — visible on dark surfaces */
   --shadow-sm: 0 1px 4px rgba(0,0,0,0.40);

@@ -61,8 +61,8 @@ export function IconSun() {
 
 export function IconMoon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
-      <path d="M14.5 10.5A6.5 6.5 0 017 3a6.5 6.5 0 100 12 6.5 6.5 0 007.5-4.5z"/>
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+      <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
     </svg>
   )
 }

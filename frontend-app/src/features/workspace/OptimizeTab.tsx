@@ -722,7 +722,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
               {lineDiff.map((line, i) => {
                 if (line.type === 'same' && !line.text.trim()) return <div key={i} style={{ height: 6 }} />
                 return (
-                  <div key={i} style={{ padding: '1px 8px', marginLeft: -8, borderRadius: 3, background: line.type === 'add' ? '#ECFDF5' : line.type === 'remove' ? '#FEF2F2' : 'transparent', color: line.type === 'add' ? '#065F46' : line.type === 'remove' ? '#991B1B' : 'var(--charcoal)', textDecoration: line.type === 'remove' ? 'line-through' : 'none', opacity: line.type === 'remove' ? 0.7 : 1, display: 'flex', gap: 8 }}>
+                  <div key={i} style={{ padding: '1px 8px', marginLeft: -8, borderRadius: 3, background: line.type === 'add' ? 'var(--diff-add-bg)' : line.type === 'remove' ? 'var(--diff-remove-bg)' : 'transparent', color: line.type === 'add' ? 'var(--diff-add-text)' : line.type === 'remove' ? 'var(--diff-remove-text)' : 'var(--text-primary)', textDecoration: line.type === 'remove' ? 'line-through' : 'none', opacity: line.type === 'remove' ? 0.7 : 1, display: 'flex', gap: 8 }}>
                     <span style={{ width: 12, flexShrink: 0, fontWeight: 700, userSelect: 'none' }}>{line.type === 'add' ? '+' : line.type === 'remove' ? '−' : ' '}</span>
                     <span>{line.text || ' '}</span>
                   </div>
