@@ -26,6 +26,7 @@ from models.linkedin_models import LinkedInRequest
 from models.tools_models import ProfessionalSummaryRequest, BulletEnhanceRequest, ResumeDocxRequest
 from models.preview_models import ResumePreviewRequest
 from models.interview_prep_models import InterviewPrepRequest
+from models.tracker_models import JobApplicationCreate, JobApplicationUpdate
 from services.ats_service import calculate_ats_score
 from services.semantic_ats_service import semantic_ats_score
 from fastapi.responses import StreamingResponse
@@ -52,6 +53,10 @@ from services.supabase_service import (
     get_user_pro_status,
     is_stripe_event_processed,
     mark_stripe_event_processed,
+    get_job_applications,
+    create_job_application,
+    update_job_application,
+    delete_job_application,
 )
 from services.exceptions import AIUnavailableError
 
@@ -727,6 +732,48 @@ def cover_letter_download_pdf(request: Request, data: CoverLetterPdfRequest, use
 
 
 # =========================================================
+# Job Application Tracker — free, auth required, no pro gate
+# =========================================================
+
+@app.get("/api/tracker")
+@limiter.limit("30/minute")
+def tracker_list(request: Request, user: dict = Depends(get_current_user)):
+    raw_jwt = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    applications = get_job_applications(user["id"], raw_jwt)
+    return {"applications": applications}
+
+
+@app.post("/api/tracker")
+@limiter.limit("10/minute")
+def tracker_create(request: Request, data: JobApplicationCreate, user: dict = Depends(get_current_user)):
+    raw_jwt = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    created = create_job_application(user["id"], data.model_dump(exclude_none=True), raw_jwt)
+    if not created:
+        raise HTTPException(status_code=500, detail="Failed to create application. Please try again.")
+    return created
+
+
+@app.patch("/api/tracker/{app_id}")
+@limiter.limit("20/minute")
+def tracker_update(request: Request, app_id: str, data: JobApplicationUpdate, user: dict = Depends(get_current_user)):
+    raw_jwt = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    updated = update_job_application(user["id"], app_id, data.model_dump(exclude_none=True), raw_jwt)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Application not found or access denied.")
+    return updated
+
+
+@app.delete("/api/tracker/{app_id}")
+@limiter.limit("10/minute")
+def tracker_delete(request: Request, app_id: str, user: dict = Depends(get_current_user)):
+    raw_jwt = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    ok = delete_job_application(user["id"], app_id, raw_jwt)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Application not found or access denied.")
+    return {"deleted": True}
+
+
+# =========================================================
 # Payments
 # =========================================================
 
@@ -983,6 +1030,10 @@ _v1_routes = [
     ("/payments/create-checkout-session", create_checkout_session,    ["POST"]),
     ("/user/pro-status",                  pro_status,                 ["GET"]),
     ("/payments/webhook",                 stripe_webhook,             ["POST"]),
+    ("/tracker",                          tracker_list,               ["GET"]),
+    ("/tracker",                          tracker_create,             ["POST"]),
+    ("/tracker/{app_id}",                 tracker_update,             ["PATCH"]),
+    ("/tracker/{app_id}",                 tracker_delete,             ["DELETE"]),
 ]
 
 for _path, _handler, _methods in _v1_routes:

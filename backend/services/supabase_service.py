@@ -337,3 +337,101 @@ def get_user_by_email(email: str) -> dict | None:
     except Exception as e:
         logger.warning("get_user_by_email failed: %s", type(e).__name__)
         return None
+
+
+# =========================================================
+# Job Application Tracker — user-scoped CRUD
+# All operations use anon key + user JWT so RLS enforces ownership.
+# =========================================================
+
+def _tracker_headers(user_jwt: str) -> dict:
+    """Headers for tracker operations: anon key + user JWT (RLS path)."""
+    anon_key = os.getenv("SUPABASE_ANON_KEY", "")
+    return {
+        "apikey": anon_key,
+        "Authorization": f"Bearer {user_jwt}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+
+
+def get_job_applications(user_id: str, user_jwt: str) -> list[dict]:
+    """Return all job applications for this user, newest first."""
+    try:
+        resp = _get_http_client().get(
+            _db_url("job_applications"),
+            headers=_tracker_headers(user_jwt),
+            params={"user_id": f"eq.{user_id}", "order": "created_at.desc"},
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        logger.warning("get_job_applications: status %s — %s", resp.status_code, resp.text[:200])
+        return []
+    except Exception as e:
+        logger.warning("get_job_applications failed: %s: %s", type(e).__name__, e)
+        return []
+
+
+def create_job_application(user_id: str, data: dict, user_jwt: str) -> dict | None:
+    """Insert a new job application row. Returns the created row or None on failure."""
+    try:
+        payload = {**data, "user_id": user_id}
+        # Remove empty string values — let DB defaults or NULL apply
+        payload = {k: v for k, v in payload.items() if v != ""}
+        resp = _get_http_client().post(
+            _db_url("job_applications"),
+            headers=_tracker_headers(user_jwt),
+            json=payload,
+        )
+        if resp.status_code in (200, 201):
+            rows = resp.json()
+            return rows[0] if rows else None
+        logger.error("create_job_application: status %s — %s", resp.status_code, resp.text[:200])
+        return None
+    except Exception as e:
+        logger.error("create_job_application failed: %s: %s", type(e).__name__, e)
+        return None
+
+
+def update_job_application(user_id: str, app_id: str, data: dict, user_jwt: str) -> dict | None:
+    """
+    Patch an existing application row.
+    Both id and user_id must match — RLS + URL filter enforce ownership.
+    Returns updated row or None if not found / not owned.
+    """
+    try:
+        # Strip empty strings; caller passes exclude_none=True but double-check
+        clean = {k: v for k, v in data.items() if v is not None and v != ""}
+        if not clean:
+            return None
+        resp = _get_http_client().patch(
+            _db_url("job_applications"),
+            headers=_tracker_headers(user_jwt),
+            params={"id": f"eq.{app_id}", "user_id": f"eq.{user_id}"},
+            json=clean,
+        )
+        if resp.status_code in (200, 204):
+            rows = resp.json() if resp.content else []
+            return rows[0] if rows else None
+        logger.warning("update_job_application: status %s — %s", resp.status_code, resp.text[:200])
+        return None
+    except Exception as e:
+        logger.error("update_job_application failed: %s: %s", type(e).__name__, e)
+        return None
+
+
+def delete_job_application(user_id: str, app_id: str, user_jwt: str) -> bool:
+    """
+    Delete an application row.
+    Both id and user_id must match — returns False if row not found or not owned.
+    """
+    try:
+        resp = _get_http_client().delete(
+            _db_url("job_applications"),
+            headers=_tracker_headers(user_jwt),
+            params={"id": f"eq.{app_id}", "user_id": f"eq.{user_id}"},
+        )
+        return resp.status_code in (200, 204)
+    except Exception as e:
+        logger.error("delete_job_application failed: %s: %s", type(e).__name__, e)
+        return False

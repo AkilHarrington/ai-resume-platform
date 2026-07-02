@@ -364,6 +364,17 @@ export function WorkspacePage() {
           Tools
         </button>
         <button
+          onClick={() => navigate('/tracker')}
+          aria-label="Application Tracker"
+          style={{
+            background: 'var(--surface-1)', color: 'var(--text-secondary)',
+            border: '1px solid var(--border)', borderRadius: 6, padding: '3px 10px',
+            fontSize: 11, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          Tracker
+        </button>
+        <button
           onClick={toggleTheme}
           aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 7px', cursor: 'pointer', fontSize: 12, lineHeight: 1 }}

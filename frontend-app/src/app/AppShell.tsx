@@ -5,6 +5,7 @@ import { ThemeProvider } from './ThemeContext'
 import { ToastProvider } from '../components/Toast'
 import { LandingPage } from '../pages/LandingPage'
 import { WorkspacePage } from '../pages/WorkspacePage'
+import { TrackerPage } from '../pages/TrackerPage'
 import { PricingPage } from '../pages/PricingPage'
 import { LoginPage } from '../pages/LoginPage'
 import { SignupPage } from '../pages/SignupPage'
@@ -26,6 +27,7 @@ export function AppShell() {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/workspace" element={<WorkspacePage />} />
+            <Route path="/tracker" element={<TrackerPage />} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
