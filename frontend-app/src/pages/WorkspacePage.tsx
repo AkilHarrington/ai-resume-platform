@@ -496,6 +496,7 @@ export function WorkspacePage() {
                 resumeText={resumeText}
                 jobDescription={jobDescription}
                 targetRole={targetRole}
+                scanGaps={scanResult?.gaps ?? []}
               />
             </ErrorBoundary>
           )}

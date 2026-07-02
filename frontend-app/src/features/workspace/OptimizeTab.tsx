@@ -310,9 +310,10 @@ interface Props {
   resumeText?: string
   jobDescription?: string
   targetRole?: string
+  scanGaps?: string[]
 }
 
-export function OptimizeTab({ result, isLoading, hasResume, onRun, error, streamingText, statusMessage, originalScore, isPro, resumeText, jobDescription, targetRole }: Props) {
+export function OptimizeTab({ result, isLoading, hasResume, onRun, error, streamingText, statusMessage, originalScore, isPro, resumeText, jobDescription, targetRole, scanGaps = [] }: Props) {
   const { showToast } = useToast()
   const { session } = useAuth()
   const [view, setView] = useState<'optimized' | 'original' | 'changes'>('optimized')
@@ -556,6 +557,19 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
         <Button fullWidth size="lg" variant="secondary" disabled={!hasResume} onClick={onRun} style={{ marginTop: 16 }}>
           Optimize My Resume
         </Button>
+        {originalScore !== undefined && originalScore >= 80 && (
+          <div style={{
+            marginTop: 10,
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            textAlign: 'center',
+            lineHeight: 1.5,
+            maxWidth: 360,
+            margin: '10px auto 0',
+          }}>
+            Your resume already clears ATS thresholds at {originalScore}. Optimization will focus on the qualitative gaps that matter to recruiters.
+          </div>
+        )}
         {error && <p style={{ color: 'var(--danger)', fontSize: 13, textAlign: 'center', marginTop: 8 }}>{error}</p>}
       </EmptyCard>
     )
@@ -572,44 +586,99 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
       {/* ── Score Delta Card ── */}
       <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--radius-lg)', padding: 28, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
         <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-heading)', marginBottom: 20 }}>Optimization Results</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 40, flexWrap: 'wrap' }}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>Before</div>
-            <ScoreRing score={result.originalScore} size={90} label="" />
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5, fontWeight: 500 }}>{scoreToPercentile(result.originalScore)}</div>
-          </div>
-          <div style={{ fontSize: 32, color: 'var(--gray-200)' }}>→</div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>After</div>
-            {scoresEqual
-              ? <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', marginTop: 8 }}>Score<br/>unavailable</div>
-              : <ScoreRing score={result.optimizedScore} size={90} label="" />
-            }
-            {!scoresEqual && (
-              <div style={{ fontSize: 11, color: 'var(--emerald)', marginTop: 5, fontWeight: 600 }}>{scoreToPercentile(result.optimizedScore)}</div>
-            )}
-          </div>
-          <div style={{ flex: 1, paddingLeft: 20, minWidth: 160 }}>
-            {improved ? (
-              <>
-                <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--success)' }}>+{result.scoreImprovement} points</div>
-                <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>ATS score improvement</div>
-              </>
-            ) : scoresEqual ? (
-              <>
-                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Resume optimized ✓</div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Re-scoring timed out — upload the optimized resume to the Scan tab to get your new score.</div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-secondary)' }}>No improvement possible</div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Your resume is already well-optimized for this role.</div>
-              </>
-            )}
-          </div>
-        </div>
+        {scoresEqual ? (
+          /* ── ATS Cleared layout — Credit Karma "factors" pattern ─────────── */
+          <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'flex-start' }}>
 
-        {(addedKeywords.length > 0 || bulletChanges > 0) && (
+            {/* Left: single score ring — reframed, not a comparison */}
+            <div style={{ textAlign: 'center', flexShrink: 0 }}>
+              <div style={{
+                fontSize: 11, color: 'var(--success)', fontWeight: 700,
+                textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6,
+              }}>
+                ATS Score
+              </div>
+              <ScoreRing score={result.optimizedScore} size={90} label="" />
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: 'var(--success)',
+                marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              }}>
+                <span>✓</span> ATS Cleared
+              </div>
+            </div>
+
+            {/* Right: named improvements */}
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-heading)', marginBottom: 4 }}>
+                Resume refined for human reviewers
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.5 }}>
+                Keywords were already strong. Claude improved the gaps that matter once a recruiter reads it:
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {addedKeywords.map(kw => (
+                  <div key={kw} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                    <span style={{ color: 'var(--success)', fontWeight: 700, fontSize: 14 }}>✓</span>
+                    <span style={{ color: 'var(--text-primary)' }}><strong>{kw}</strong> — added</span>
+                  </div>
+                ))}
+                {bulletChanges > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                    <span style={{ color: 'var(--success)', fontWeight: 700, fontSize: 14 }}>✓</span>
+                    <span style={{ color: 'var(--text-primary)' }}>
+                      <strong>{bulletChanges} bullet{bulletChanges !== 1 ? 's' : ''}</strong> rewritten for impact and clarity
+                    </span>
+                  </div>
+                )}
+                {scanGaps.slice(0, 2).map((gap, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, marginTop: 2 }}>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 700, fontSize: 14, marginTop: 1 }}>→</span>
+                    <span style={{ color: 'var(--text-muted)', lineHeight: 1.4 }}>{gap} — addressed where possible</span>
+                  </div>
+                ))}
+                {addedKeywords.length === 0 && bulletChanges === 0 && scanGaps.length === 0 && (
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                    Your resume was already well-matched for this role.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+        ) : (
+          /* ── Standard Before → After layout ─────────────────────────────── */
+          <div style={{ display: 'flex', alignItems: 'center', gap: 40, flexWrap: 'wrap' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>Before</div>
+              <ScoreRing score={result.originalScore} size={90} label="" />
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5, fontWeight: 500 }}>{scoreToPercentile(result.originalScore)}</div>
+            </div>
+            <div style={{ fontSize: 32, color: 'var(--gray-200)' }}>→</div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 6 }}>After</div>
+              <ScoreRing score={result.optimizedScore} size={90} label="" />
+              <div style={{ fontSize: 11, color: 'var(--emerald)', marginTop: 5, fontWeight: 600 }}>
+                {scoreToPercentile(result.optimizedScore)}
+              </div>
+            </div>
+            <div style={{ flex: 1, paddingLeft: 20, minWidth: 160 }}>
+              {improved ? (
+                <>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--success)' }}>+{result.scoreImprovement} points</div>
+                  <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>ATS score improvement</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-secondary)' }}>No improvement possible</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Your resume is already well-optimized for this role.</div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* "What Claude changed" chips — only shown when score improved (not in ATS Cleared layout) */}
+        {!scoresEqual && (addedKeywords.length > 0 || bulletChanges > 0) && (
           <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--gray-100)', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>What Claude changed</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
