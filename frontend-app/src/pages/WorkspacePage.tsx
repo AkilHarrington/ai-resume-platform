@@ -301,9 +301,13 @@ export function WorkspacePage() {
       if (isStreamingInterview) return { msg: 'Generating your interview questions…', btn: null, action: null, disabled: true }
       if (!interviewResult) {
         if (!isPro) return { msg: 'Interview Prep is a Pro feature', btn: 'Upgrade to Pro →', action: () => navigate('/pricing'), disabled: false }
-        return { msg: 'AI generates 10 targeted questions with STAR coaching notes', btn: 'Generate Questions', action: runInterviewPrep, disabled: false }
+        return { msg: 'AI generates 10 targeted questions with coaching notes and follow-ups', btn: 'Generate Questions', action: runInterviewPrep, disabled: false }
       }
-      return { msg: 'Your complete package is ready — resume, cover letter, LinkedIn, and interview prep all set', btn: 'View package →', action: () => setActiveTab('summary'), disabled: false }
+      const doneItems = ['resume', ...(coverLetter ? ['cover letter'] : []), ...(linkedin ? ['LinkedIn'] : []), 'interview prep']
+      const packageMsg = doneItems.length === 4
+        ? 'Your complete package is ready — resume, cover letter, LinkedIn, and interview prep all set'
+        : `Package ready — ${doneItems.join(', ')} complete`
+      return { msg: packageMsg, btn: 'View package →', action: () => setActiveTab('summary'), disabled: false }
     }
 
     return { msg: null, btn: null, action: null, disabled: true }
