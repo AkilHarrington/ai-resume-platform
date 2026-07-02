@@ -29,7 +29,7 @@ const STEPS: { id: Tab; label: string; short: string }[] = [
   { id: 'scan',         label: 'ATS Scan',       short: 'Scan'    },
   { id: 'optimize',     label: 'Optimize',       short: 'Opt.'    },
   { id: 'cover-letter', label: 'Cover Letter',   short: 'Cover'   },
-  { id: 'linkedin',     label: 'LinkedIn',       short: 'LinkedIn'},
+  { id: 'linkedin',     label: 'LinkedIn',       short: 'LI'      },
   { id: 'interview',    label: 'Interview Prep', short: 'Prep'    },
 ]
 
@@ -324,9 +324,9 @@ export function WorkspacePage() {
 
       {/* ── Nav row ────────────────────────────────────────────────────────── */}
       <header style={{
-        height: 44, flexShrink: 0,
+        height: isMobile ? 52 : 44, flexShrink: 0,
         background: 'var(--surface-0)', borderBottom: '1px solid var(--border)',
-        display: 'flex', alignItems: 'center', padding: '0 20px', gap: 10,
+        display: 'flex', alignItems: 'center', padding: isMobile ? '0 12px' : '0 20px', gap: isMobile ? 6 : 10,
       }}>
         <button
           onClick={() => navigate('/')}
@@ -361,7 +361,7 @@ export function WorkspacePage() {
           style={{
             background: activeTab === 'tools' ? 'var(--navy)' : 'var(--surface-1)',
             color: activeTab === 'tools' ? 'white' : 'var(--text-secondary)',
-            border: '1px solid var(--border)', borderRadius: 6, padding: '3px 10px',
+            border: '1px solid var(--border)', borderRadius: 6, padding: isMobile ? '8px 10px' : '3px 10px',
             fontSize: 11, fontWeight: 600, cursor: 'pointer',
           }}
         >
@@ -372,7 +372,7 @@ export function WorkspacePage() {
           aria-label="Application Tracker"
           style={{
             background: 'var(--surface-1)', color: 'var(--text-secondary)',
-            border: '1px solid var(--border)', borderRadius: 6, padding: '3px 10px',
+            border: '1px solid var(--border)', borderRadius: 6, padding: isMobile ? '8px 10px' : '3px 10px',
             fontSize: 11, fontWeight: 600, cursor: 'pointer',
           }}
         >
@@ -381,20 +381,20 @@ export function WorkspacePage() {
         <button
           onClick={toggleTheme}
           aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 7px', cursor: 'pointer', fontSize: 12, lineHeight: 1 }}
+          style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 6, padding: isMobile ? '8px 9px' : '3px 7px', cursor: 'pointer', fontSize: 12, lineHeight: 1 }}
         >
           {theme === 'dark' ? <IconSun /> : <IconMoon />}
         </button>
         <button
           onClick={() => { signOut(); navigate('/') }}
-          style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}
+          style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: isMobile ? '8px 10px' : '3px 10px', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}
         >
           Sign out
         </button>
       </header>
 
-      {/* ── Step indicator bar ─────────────────────────────────────────────── */}
-      <div style={{ flexShrink: 0, background: 'var(--surface-0)', borderBottom: '1px solid var(--border)', padding: '12px 20px 14px' }}>
+      {/* ── Step indicator bar — desktop only (mobile uses bottom nav) ──────── */}
+      {!isMobile && <div style={{ flexShrink: 0, background: 'var(--surface-0)', borderBottom: '1px solid var(--border)', padding: '12px 20px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', maxWidth: 600, margin: '0 auto' }}>
           {STEPS.map((step, i) => {
             const stepNum  = i + 1
@@ -442,10 +442,10 @@ export function WorkspacePage() {
             return stepItems
           })}
         </div>
-      </div>
+      </div>}
 
       {/* ── Main content ───────────────────────────────────────────────────── */}
-      <main style={{ flex: 1, overflow: 'auto', padding: isMobile ? '16px 12px 80px' : '24px' }}>
+      <main style={{ flex: 1, overflow: 'auto', padding: isMobile ? '16px 12px 16px' : '24px' }}>
         <div style={{ maxWidth: 800, margin: '0 auto' }}>
 
           {/* Step 1: Upload + JD setup */}
@@ -609,7 +609,9 @@ export function WorkspacePage() {
           flexShrink: 0, borderTop: '1px solid var(--border)',
           background: 'var(--surface-0)',
           padding: isMobile ? '10px 12px' : '14px 20px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+          alignItems: isMobile ? 'stretch' : 'center',
+          justifyContent: 'space-between', gap: isMobile ? 8 : 12,
         }}>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{banner.msg}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
@@ -630,13 +632,14 @@ export function WorkspacePage() {
                 onClick={banner.action ?? undefined}
                 disabled={banner.disabled}
                 style={{
-                  padding: '9px 20px',
+                  padding: '12px 20px',
                   background: banner.disabled ? 'var(--surface-1)' : 'var(--navy)',
                   color: banner.disabled ? 'var(--text-muted)' : 'white',
                   border: banner.disabled ? '1px solid var(--border)' : 'none',
                   borderRadius: 8, fontSize: 13, fontWeight: 700,
                   cursor: banner.disabled ? 'default' : 'pointer',
-                  display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  whiteSpace: 'nowrap', width: isMobile ? '100%' : 'auto',
                   transition: 'background 0.15s',
                 }}
               >
@@ -647,10 +650,10 @@ export function WorkspacePage() {
         </div>
       )}
 
-      {/* ── Mobile bottom step bar ───────────────────────────────────────────── */}
+      {/* ── Mobile bottom step bar — in-flow (not fixed) so banner stays visible ── */}
       {isMobile && (
         <nav style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
+          flexShrink: 0,
           background: 'var(--surface-0)', borderTop: '1px solid var(--border)',
           display: 'flex', paddingBottom: 'env(safe-area-inset-bottom)',
         }}>
@@ -662,15 +665,17 @@ export function WorkspacePage() {
               <button
                 key={step.id}
                 onClick={() => setActiveTab(step.id)}
+                aria-label={`Step ${stepNum}: ${step.label}`}
+                aria-current={isActive ? 'step' : undefined}
                 style={{
-                  flex: 1, padding: '8px 2px 10px', border: 'none', cursor: 'pointer',
+                  flex: 1, minHeight: 48, padding: '10px 2px 12px', border: 'none', cursor: 'pointer',
                   background: 'transparent',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
                   color: isActive ? 'var(--navy)' : isDone ? 'var(--success)' : 'var(--text-muted)',
                   transition: 'color 0.12s',
                 }}
               >
-                <span style={{ fontSize: 12, fontWeight: 800, lineHeight: 1 }}>{isDone ? '✓' : stepNum}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, lineHeight: 1 }}>{isDone ? '✓' : stepNum}</span>
                 <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.02em' }}>{step.short}</span>
               </button>
             )
