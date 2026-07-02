@@ -492,32 +492,32 @@ async def resume_optimize_stream(request: Request, data: ResumeOptimizeRequest, 
             # ── Step 4: re-score (Haiku, ~2s) ────────────────────────────────
             yield f"data: {json.dumps({'type': 'status', 'message': 'Scoring your improvements…'})}\n\n"
             if job_description.strip():
-                improved_ats = semantic_ats_score(optimized_text, job_description)
-                if improved_ats.get("ats_score", 0) == 0 and original_score > 0:
-                    # Score of 0 likely means a parse/transport failure — fall through
-                    # to keyword-diff fallback rather than wasting a duplicate call.
-                    logger.warning("Re-score returned 0 — falling through to keyword-diff fallback.")
+                try:
+                    improved_ats = semantic_ats_score(optimized_text, job_description)
+                    if improved_ats.get("ats_score", 0) == 0 and original_score > 0:
+                        logger.warning("Re-score returned 0 — falling through to keyword-diff fallback.")
+                        raise ValueError("scorer returned 0")
+                except Exception:
+                    # Haiku call failed or returned 0 — estimate from keyword delta
+                    logger.warning("Re-score unavailable — estimating from keyword diff.")
+                    rule_improved = calculate_ats_score(optimized_text, job_description)
+                    rule_before   = rule_ats.get("ats_score", 0)
+                    rule_after    = rule_improved.get("ats_score", 0)
+                    if rule_before > 0 and rule_after > rule_before:
+                        keyword_gain   = (rule_after - rule_before) / 100.0
+                        estimated_gain = max(1, min(round(original_score * keyword_gain * 0.5), 10))
+                        improved_ats   = {**original_ats, "ats_score": original_score + estimated_gain,
+                                          "matched_keywords": rule_improved.get("matched_keywords", []),
+                                          "missing_keywords":  rule_improved.get("missing_keywords", [])}
+                    else:
+                        improved_ats = {**original_ats, "ats_score": original_score}
             else:
                 improved_ats = calculate_ats_score(optimized_text, job_description)
             improved_score = improved_ats.get("ats_score", 0)
-
-            # Fallback: estimate from keyword diff when both semantic attempts fail
-            scorer_failed = improved_score == 0 and original_score > 0
+            scorer_failed  = improved_score == 0 and original_score > 0
             if scorer_failed:
-                logger.warning("Semantic re-score failed twice — estimating from keyword diff.")
-                rule_improved = calculate_ats_score(optimized_text, job_description)
-                rule_before = rule_ats.get("ats_score", 0)
-                rule_after = rule_improved.get("ats_score", 0)
-                if rule_before > 0 and rule_after > rule_before:
-                    keyword_gain = (rule_after - rule_before) / 100.0
-                    estimated_gain = max(1, min(round(original_score * keyword_gain * 0.5), 10))
-                    improved_score = original_score + estimated_gain
-                    improved_ats = {**original_ats, "ats_score": improved_score,
-                                    "matched_keywords": rule_improved.get("matched_keywords", []),
-                                    "missing_keywords": rule_improved.get("missing_keywords", [])}
-                else:
-                    improved_score = original_score
-                    improved_ats = {**original_ats, "ats_score": improved_score}
+                improved_score = original_score
+                improved_ats   = {**original_ats, "ats_score": improved_score}
 
             # Cap credibility ceiling
             max_allowed = 15 if original_score < 75 else 12
