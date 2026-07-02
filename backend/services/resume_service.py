@@ -67,6 +67,11 @@ The final output must sound like it was written by a sharp, articulate human pro
 - Never delete existing sections or reduce the candidate's seniority level
 - Preserve the overall structure and section order of the original resume
 - The output must be at least 90% the length of the original
+- NO META-COMMENTARY: Never append explanatory phrases to bullets that justify why the bullet is relevant
+  to the role. Forbidden patterns include anything after an em dash (—) that begins with words like
+  "directly demonstrating", "proving", "showcasing", "highlighting", "underscoring", "reflecting", or any
+  phrase that references "this role", "the role requires", "the job description", or "what employers want".
+  Write the bullet. Stop. The bullet must speak for itself — never explain it.
 - NAMED TOOLS ARE NEVER INFERRED: Never add any specific named software, platform, or tool — Google Analytics,
   Salesforce, Lucid, Kantar, Tableau, HubSpot, Asana, or any other — unless that exact name already appears in the
   original resume. Do not reason "they probably used it." Do not add it to Skills. Do not mention it in a bullet.
