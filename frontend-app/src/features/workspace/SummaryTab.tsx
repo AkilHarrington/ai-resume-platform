@@ -44,6 +44,17 @@ export function SummaryTab({
   const improvement = (beforeScore !== null && afterScore !== null) ? afterScore - beforeScore : null
   const scoresEqual = beforeScore !== null && afterScore !== null && beforeScore === afterScore && beforeScore > 0
 
+  // Dynamic step count — steps are skippable so we track what was actually done
+  const completedSteps = [
+    true,                    // Step 1: Upload (always done to reach summary)
+    scanResult !== null,     // Step 2: ATS Scan
+    optimizeResult !== null, // Step 3: Optimize
+    !!coverLetter,           // Step 4: Cover Letter
+    linkedin !== null,       // Step 5: LinkedIn
+  ]
+  const completedCount = completedSteps.filter(Boolean).length
+  const allComplete = completedCount === 5
+
   const copy = async (text: string, key: string) => {
     try {
       await navigator.clipboard.writeText(text)
@@ -140,15 +151,17 @@ export function SummaryTab({
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M2 6L5 9L10 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          All 5 steps complete
+          {allComplete ? 'All 5 steps complete' : `${completedCount} of 5 steps complete`}
         </span>
 
         <h2 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', margin: '0 0 8px' }}>
           You're ready to apply
         </h2>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 20px', lineHeight: 1.65, maxWidth: 480 }}>
-          Your resume, cover letter, and LinkedIn are all aligned for this role.
-          Everything you need is below — use it while it's fresh.
+          {allComplete
+            ? "Your resume, cover letter, and LinkedIn are all aligned for this role. Everything you need is below — use it while it's fresh."
+            : "Everything you've completed is ready below. You can finish the remaining steps anytime — use what you have while it's fresh."
+          }
         </p>
 
         {/* Score metrics */}
