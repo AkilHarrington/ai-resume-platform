@@ -707,6 +707,90 @@ def stream_interview_prep(
 
 
 # =========================================================
+# Skills-First Reformat — Claude Sonnet (full quality required)
+# Restructures a resume to lead with a Skills section.
+# Non-streaming — needs full resume context before outputting anything.
+# =========================================================
+
+SKILLS_FIRST_SYSTEM_PROMPT = """You are a resume editor that restructures resumes to lead with a dedicated Skills section.
+
+RULES — read these carefully before producing any output:
+
+1. PRESERVE EVERYTHING. Every job title, company name, date range, and bullet point from the original must appear in your output unchanged. Do not remove, shorten, merge, or reorder any experience entry. Do not collapse two roles into one. Do not summarize bullets. Count the job entries before you begin, then count them in your output — they must match exactly. Each position must appear as a separate entry with its own heading and date range.
+
+2. BUILD THE SKILLS SECTION. Extract all skills, tools, technologies, methodologies, and domain expertise mentioned anywhere in the resume — in bullets, summaries, or job descriptions. Deduplicate. Group into 3–5 logical categories (e.g. "Operations & Process", "Tools & Software", "Leadership", "Compliance & Reporting"). Only include skills using the exact words found in the resume — do not paraphrase or invent skills not present in the original text.
+
+3. PLACEMENT. Insert the Skills section:
+   - AFTER the contact block and summary/objective (if present)
+   - BEFORE the Experience section
+   - If a Skills section already exists, replace it with the expanded version — do not duplicate it
+
+4. FORMAT. Use the same formatting conventions as the rest of the resume. If the resume uses bullet points, use bullet points in the Skills section. If it uses plain lists, match that. Do not change heading styles or capitalization conventions.
+
+5. OUTPUT. Return only the complete restructured resume text. No commentary, no preamble, no explanation. The output must be a complete resume, not a diff or a summary."""
+
+
+def _build_skills_first_user_message(
+    resume_text: str,
+    job_description: str = "",
+    target_role: str = "",
+) -> str:
+    """User message: dynamic data only. Instructions live in the cached system prompt."""
+    role_hint = f" for a {target_role} role" if target_role else ""
+    jd_hint = (
+        f"\n\nJob description for context (use to prioritize which skills to feature first — list the most JD-relevant skills at the top of each category):\n{job_description[:3000]}"
+        if job_description else ""
+    )
+    return f"""Restructure this resume{role_hint} to lead with a Skills section.{jd_hint}
+
+Resume:
+<resume>
+{resume_text}
+</resume>
+
+Return the complete restructured resume. Preserve every job entry, every date range, and every bullet point exactly as written."""
+
+
+def skills_first_reformat(
+    resume_text: str,
+    job_description: str = "",
+    target_role: str = "",
+) -> str:
+    """Restructure a resume to lead with a Skills section.
+
+    Returns the full restructured resume text.
+    Non-streaming — requires full context before producing output.
+    Uses cached system prompt for latency reduction on repeated calls.
+    """
+    user_message = _build_skills_first_user_message(resume_text, job_description, target_role)
+    client = _get_client()
+    try:
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=8192,
+            temperature=0,
+            system=[{
+                "type": "text",
+                "text": SKILLS_FIRST_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": user_message}],
+        )
+        return response.content[0].text.strip()
+    except anthropic.AuthenticationError:
+        raise AIUnavailableError("Invalid Anthropic API key. Check your ANTHROPIC_API_KEY.")
+    except anthropic.RateLimitError:
+        raise AIUnavailableError("Anthropic rate limit reached. Please wait a moment and try again.")
+    except anthropic.APIStatusError as e:
+        raise AIUnavailableError(f"Claude is temporarily unavailable (status {e.status_code}). Please try again shortly.")
+    except anthropic.APIConnectionError:
+        raise AIUnavailableError("Could not reach Claude. Check your internet connection and try again.")
+    except Exception as e:
+        logger.error("skills_first_reformat unexpected error: %s: %s", type(e).__name__, e)
+        raise AIUnavailableError("Skills-first reformat encountered an unexpected error. Please try again.")
+
+
+# =========================================================
 # Preview bullets — Claude Haiku (cheap, ~$0.001/call)
 # Returns 3 optimized bullets for the blurred free-user preview.
 # Never raises — silent failure returns [].

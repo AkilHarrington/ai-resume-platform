@@ -344,6 +344,15 @@ export async function previewOptimize(params: {
   }
 }
 
+export async function skillsFirstReformat(params: {
+  resumeText: string
+  jobDescription?: string
+  targetRole?: string
+}): Promise<string> {
+  const { data } = await api.post<{ reformattedText: string }>('/api/v1/resume/skills-first', params)
+  return data.reformattedText
+}
+
 export async function createCheckoutSession(plan: 'monthly' | 'onetime'): Promise<{ url: string }> {
   const { data } = await api.post<{ url: string }>(`/api/v1/payments/create-checkout-session?plan=${plan}`)
   return data

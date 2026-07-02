@@ -5,7 +5,7 @@ import { EmptyState, EmptyCard, IconEdit, UpgradePrompt } from './shared'
 import { useToast } from '../../components/Toast'
 import { useAuth } from '../../app/AuthContext'
 import type { OptimizeResult } from '../../api/resumeApi'
-import { downloadResumeDocx, previewOptimize } from '../../api/resumeApi'
+import { downloadResumeDocx, previewOptimize, skillsFirstReformat } from '../../api/resumeApi'
 import type { ResumeTemplate } from '../../types/resumeTemplate'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -309,9 +309,10 @@ interface Props {
   isPro?: boolean
   resumeText?: string
   jobDescription?: string
+  targetRole?: string
 }
 
-export function OptimizeTab({ result, isLoading, hasResume, onRun, error, streamingText, statusMessage, originalScore, isPro, resumeText, jobDescription }: Props) {
+export function OptimizeTab({ result, isLoading, hasResume, onRun, error, streamingText, statusMessage, originalScore, isPro, resumeText, jobDescription, targetRole }: Props) {
   const { showToast } = useToast()
   const { session } = useAuth()
   const [view, setView] = useState<'optimized' | 'original' | 'changes'>('optimized')
@@ -319,6 +320,66 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
   const [selectedPalette, setSelectedPalette] = useState<ResumePalette>('blue')
   const [isDownloading, setIsDownloading] = useState(false)
   const [isDownloadingDocx, setIsDownloadingDocx] = useState(false)
+
+  // ── Skills-first toggle ───────────────────────────────────────────────────
+  const [skillsFirstText, setSkillsFirstText] = useState<string | null>(null)
+  const [activeVersion, setActiveVersion] = useState<'original' | 'skills-first'>('original')
+  const [isLoadingSkillsFirst, setIsLoadingSkillsFirst] = useState(false)
+  const [skillsFirstError, setSkillsFirstError] = useState('')
+
+  // Reset skills-first state whenever a new result arrives
+  const prevResultRef = useRef<OptimizeResult | null>(null)
+  if (result !== prevResultRef.current) {
+    prevResultRef.current = result
+    if (skillsFirstText !== null) {
+      // Can't call setState during render — schedule via effect workaround below
+    }
+  }
+
+  useEffect(() => {
+    // Clear skills-first state when result changes (new optimization run)
+    setSkillsFirstText(null)
+    setActiveVersion('original')
+    setSkillsFirstError('')
+  }, [result])
+
+  const handleSkillsFirstToggle = async () => {
+    if (!result?.optimizedResumeText) return
+    if (skillsFirstText) {
+      // Already generated — just flip the version
+      setActiveVersion(prev => prev === 'original' ? 'skills-first' : 'original')
+      return
+    }
+    setIsLoadingSkillsFirst(true)
+    setSkillsFirstError('')
+    try {
+      const reformatted = await skillsFirstReformat({
+        resumeText: result.optimizedResumeText,
+        jobDescription: jobDescription ?? '',
+        targetRole: targetRole ?? '',
+      })
+      // Validate: count year-pattern lines to detect dropped job entries
+      const countJobEntries = (text: string) =>
+        (text.match(/\b(19|20)\d{2}\b/g) || []).length
+      const beforeCount = countJobEntries(result.optimizedResumeText)
+      const afterCount  = countJobEntries(reformatted)
+      if (afterCount < beforeCount - 2) {
+        setSkillsFirstError('Restructuring dropped some content. Please try again.')
+        return
+      }
+      setSkillsFirstText(reformatted)
+      setActiveVersion('skills-first')
+    } catch (e: unknown) {
+      setSkillsFirstError(e instanceof Error ? e.message : 'Something went wrong. Please try again.')
+    } finally {
+      setIsLoadingSkillsFirst(false)
+    }
+  }
+
+  // displayedText: routes PDF/DOCX/copy to whichever version is active
+  const displayedResumeText = (activeVersion === 'skills-first' && skillsFirstText)
+    ? skillsFirstText
+    : result?.optimizedResumeText ?? ''
 
   // ── Blurred preview for free users ───────────────────────────────────────
   const [previewBullets, setPreviewBullets] = useState<string[]>([])
@@ -361,7 +422,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
   }, [result])
 
   const handleDownloadPDF = async () => {
-    if (!result?.optimizedResumeText) return
+    if (!displayedResumeText) return
     setIsDownloading(true)
     try {
       const token = session?.access_token
@@ -369,7 +430,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
       const resp = await fetch(`${API_BASE}/api/v1/resume/download-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ resumeText: result.optimizedResumeText, template: selectedTemplate, palette: selectedPalette }),
+        body: JSON.stringify({ resumeText: displayedResumeText, template: selectedTemplate, palette: selectedPalette }),
       })
       if (!resp.ok) {
         const detail = await resp.json().catch(() => ({}))
@@ -379,7 +440,9 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `resume-${selectedTemplate}.pdf`
+      a.download = activeVersion === 'skills-first'
+        ? `resume-skills-first-${selectedTemplate}.pdf`
+        : `resume-${selectedTemplate}.pdf`
       a.click()
       URL.revokeObjectURL(url)
       showToast('PDF downloaded successfully')
@@ -391,14 +454,16 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
   }
 
   const handleDownloadDocx = async () => {
-    if (!result?.optimizedResumeText) return
+    if (!displayedResumeText) return
     setIsDownloadingDocx(true)
     try {
-      const blob = await downloadResumeDocx({ resumeText: result.optimizedResumeText, template: selectedTemplate })
+      const blob = await downloadResumeDocx({ resumeText: displayedResumeText, template: selectedTemplate })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `resume-${selectedTemplate}.docx`
+      a.download = activeVersion === 'skills-first'
+        ? `resume-skills-first-${selectedTemplate}.docx`
+        : `resume-${selectedTemplate}.docx`
       a.click()
       URL.revokeObjectURL(url)
       showToast('DOCX downloaded successfully')
@@ -597,7 +662,9 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
             </div>
           ) : (
             <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.7, maxHeight: 400, overflow: 'auto', padding: 16, background: 'var(--surface-1)', borderRadius: 'var(--radius)' }}>
-              {view === 'optimized' ? result.optimizedResumeText : result.originalResumeText}
+              {view === 'optimized'
+                ? (activeVersion === 'skills-first' && skillsFirstText ? skillsFirstText : result.optimizedResumeText)
+                : result.originalResumeText}
             </pre>
           )}
 
@@ -605,7 +672,7 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
             style={{ marginTop: 12 }} size="sm" variant="outline"
             onClick={async () => {
               try {
-                await navigator.clipboard.writeText(result.optimizedResumeText)
+                await navigator.clipboard.writeText(displayedResumeText)
                 showToast('Copied to clipboard')
               } catch {
                 showToast('Copy failed — please select and copy manually.', 'error')
@@ -693,6 +760,66 @@ export function OptimizeTab({ result, isLoading, hasResume, onRun, error, stream
             <Button size="md" variant="outline" onClick={handleDownloadDocx} disabled={isDownloadingDocx} style={{ minWidth: 160 }}>
               {isDownloadingDocx ? 'Generating...' : 'Download DOCX'}
             </Button>
+          </div>
+
+          {/* ── Skills-First toggle ── */}
+          <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-heading)', margin: '0 0 2px' }}>Skills-First Layout</p>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+                  Restructures your resume to lead with a grouped Skills section — ideal for skills-based screening.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+              <button
+                onClick={handleSkillsFirstToggle}
+                disabled={isLoadingSkillsFirst}
+                style={{
+                  alignSelf: 'flex-start',
+                  padding: '8px 18px', fontSize: 13, fontWeight: 600, borderRadius: 8,
+                  background: activeVersion === 'skills-first' ? 'var(--success-light)' : 'var(--surface-1)',
+                  color: activeVersion === 'skills-first' ? 'var(--success)' : 'var(--text-secondary)',
+                  border: `1px solid ${activeVersion === 'skills-first' ? 'var(--success)' : 'var(--border)'}`,
+                  cursor: isLoadingSkillsFirst ? 'default' : 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {isLoadingSkillsFirst
+                  ? 'Generating skills-first version…'
+                  : activeVersion === 'skills-first'
+                    ? '✓ Skills-First Active'
+                    : skillsFirstText
+                      ? 'Switch to Skills-First'
+                      : 'Try Skills-First Layout'}
+              </button>
+
+              {skillsFirstText && (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {(['original', 'skills-first'] as const).map(v => (
+                    <button
+                      key={v}
+                      onClick={() => setActiveVersion(v)}
+                      style={{
+                        padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 6,
+                        background: activeVersion === v ? 'var(--navy)' : 'var(--surface-1)',
+                        color: activeVersion === v ? 'white' : 'var(--text-secondary)',
+                        border: '1px solid var(--border)', cursor: 'pointer',
+                        transition: 'all 0.12s ease',
+                      }}
+                    >
+                      {v === 'original' ? 'Original' : 'Skills-First'}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {skillsFirstError && (
+                <p style={{ fontSize: 12, color: 'var(--danger)', margin: 0 }}>{skillsFirstError}</p>
+              )}
+            </div>
           </div>
         </div>
       )}

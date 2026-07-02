@@ -26,6 +26,7 @@ from models.linkedin_models import LinkedInRequest
 from models.tools_models import ProfessionalSummaryRequest, BulletEnhanceRequest, ResumeDocxRequest
 from models.preview_models import ResumePreviewRequest
 from models.interview_prep_models import InterviewPrepRequest
+from models.skills_first_models import SkillsFirstRequest
 from models.tracker_models import JobApplicationCreate, JobApplicationUpdate
 from services.ats_service import calculate_ats_score
 from services.semantic_ats_service import semantic_ats_score
@@ -40,6 +41,7 @@ from services.resume_service import (
     enhance_bullet_point,
     generate_preview_bullets,
     stream_interview_prep,
+    skills_first_reformat,
 )
 from services.pdf_service import generate_resume_pdf, generate_cover_letter_pdf
 from services.docx_service import generate_resume_docx
@@ -945,6 +947,25 @@ async def resume_interview_prep(request: Request, data: InterviewPrepRequest, us
 
 
 # =========================================================
+# Skills-First Reformat — Pro, sync def (CPU-bound, runs in thread pool)
+# Restructures an optimized resume to lead with a Skills section.
+# =========================================================
+
+@app.post("/api/resume/skills-first")
+@limiter.limit("5/minute")
+def resume_skills_first(request: Request, data: SkillsFirstRequest, user: dict = Depends(require_pro)):
+    if not data.resumeText.strip():
+        raise HTTPException(status_code=400, detail="Resume text is required.")
+    try:
+        result = skills_first_reformat(data.resumeText, data.jobDescription, data.targetRole)
+        if not result or len(result) < max(100, int(len(data.resumeText) * 0.5)):
+            raise HTTPException(status_code=500, detail="Reformatting produced an unexpectedly short result. Please try again.")
+        return {"reformattedText": result}
+    except AIUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+# =========================================================
 # AI Tools — Professional Summary Generator (free, auth required)
 # sync def: runs in FastAPI's thread pool
 # =========================================================
@@ -1017,6 +1038,7 @@ _v1_routes = [
     ("/resume/scan",                      resume_scan,                ["POST"]),
     ("/resume/preview-optimize",          resume_preview_optimize,    ["POST"]),
     ("/resume/interview-prep",            resume_interview_prep,      ["POST"]),
+    ("/resume/skills-first",              resume_skills_first,        ["POST"]),
     ("/resume/optimize/stream",           resume_optimize_stream,     ["POST"]),
     ("/cover-letter/generate",            cover_letter_generate,      ["POST"]),
     ("/cover-letter/stream",              cover_letter_stream,        ["POST"]),

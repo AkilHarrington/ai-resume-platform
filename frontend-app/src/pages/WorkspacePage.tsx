@@ -495,6 +495,7 @@ export function WorkspacePage() {
                 isPro={isPro}
                 resumeText={resumeText}
                 jobDescription={jobDescription}
+                targetRole={targetRole}
               />
             </ErrorBoundary>
           )}
